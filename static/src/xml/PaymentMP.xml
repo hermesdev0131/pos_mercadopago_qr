@@ -1,0 +1,3 @@
+<t t-name="MP.PaymentPlaceholder">
+    <div style="padding: 16px;">MercadoPago QR Module Loaded</div>
+</t>
