@@ -1,39 +1,59 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <templates>
 
-    <!-- MercadoPago Payment UI -->
     <t t-name="pos_mercadopago_qr.PaymentMethodLineMP">
-        <div class="mp-box o_pos_paymentline_extra">
+        <div class="mp-box o_pos_paymentline_extra" style="padding: 20px; background: #f9f9f9; border: 1px solid #ddd; border-radius: 8px; margin: 10px;">
+            
             <t t-if="mpState.status == 'idle'">
-                <button type="button"
-                        class="btn btn-primary"
+                <button type="button" 
+                        class="btn btn-primary" 
+                        style="width: 100%; font-size: 18px; padding: 10px;"
                         t-on-click="startMercadoPago">
                     Generate MercadoPago QR
                 </button>
             </t>
 
             <t t-if="mpState.status == 'loading'">
-                <span>Generating QR...</span>
+                <div style="text-align: center;">
+                    <i class="fa fa-spinner fa-spin fa-2x"/>
+                    <span style="display: block; margin-top: 10px;">Generating QR...</span>
+                </div>
             </t>
 
             <t t-if="mpState.status == 'pending'">
-                <p>Ask the customer to scan the QR:</p>
-                <img t-att-src="mpState.qr_url" style="max-width: 200px; max-height: 200px;"/>
-                <p>Waiting for payment confirmation...</p>
+                <div style="text-align: center;">
+                    <p style="font-weight: bold;">Scan to Pay:</p>
+                    <img t-att-src="mpState.qr_url" style="width: 200px; height: 200px; object-fit: contain; border: 1px solid #ccc;"/>
+                    <p style="margin-top: 10px;"><i class="fa fa-circle-o-notch fa-spin"/> Waiting for confirmation...</p>
+                </div>
             </t>
 
             <t t-if="mpState.status == 'approved'">
-                <p style="color: green; font-weight: bold;">
-                    Payment approved by MercadoPago.
-                </p>
+                <div style="text-align: center; color: green;">
+                    <i class="fa fa-check-circle fa-3x"/>
+                    <p style="font-weight: bold; font-size: 18px; margin-top: 10px;">Payment Approved!</p>
+                </div>
             </t>
 
             <t t-if="mpState.status == 'error'">
-                <p style="color: red;">
-                    <t t-esc="mpState.error"/>
-                </p>
+                <div style="text-align: center; color: red;">
+                    <i class="fa fa-exclamation-triangle fa-2x"/>
+                    <p style="margin-top: 10px;"><t t-esc="mpState.error"/></p>
+                    <button class="btn btn-secondary" t-on-click="() => this.mpState.status = 'idle'">Try Again</button>
+                </div>
             </t>
         </div>
+    </t>
+
+    <t t-name="pos_mercadopago_qr.PaymentScreen" t-inherit="point_of_sale.PaymentScreen" t-inherit-mode="extension">
+        
+        <xpath expr="//div[hasclass('payment-buttons')]" position="before">
+            
+            <t t-if="isMercadoPago">
+                <t t-call="pos_mercadopago_qr.PaymentMethodLineMP"/>
+            </t>
+            
+        </xpath>
     </t>
 
 </templates>
