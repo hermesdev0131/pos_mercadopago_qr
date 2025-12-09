@@ -1,17 +1,21 @@
 /** @odoo-module **/
 
+import { PaymentScreen } from "@point_of_sale/app/screens/payment_screen/payment_screen";
 import { patch } from "@web/core/utils/patch";
 import { useService } from "@web/core/utils/hooks";
-import { useState } from "@odoo/owl";
+import { useState, onMounted } from "@odoo/owl";
 
 console.log("MercadoPago POS Module Loaded OK");
 
-const mercadopagoExtension = {
+// Patch the PaymentScreen directly. 
+// This is the main controller for the payment view.
+patch(PaymentScreen.prototype, {
     setup() {
         this._super(...arguments);
         this.rpc = useService("rpc");
         this.notification = useService("notification");
 
+        // Define the reactive state for your MercadoPago UI
         this.mpState = useState({
             status: "idle",
             qr_url: null,
@@ -20,26 +24,30 @@ const mercadopagoExtension = {
         });
     },
 
+    // Helper to identify if the currently selected payment method is MP
     get isMercadoPago() {
-        const pm = this.paymentMethod || this.props.paymentMethod;
-        return pm && pm.name === "MercadoPago";
+        const paymentLine = this.currentOrder.paymentLines.find(line => line.selected);
+        return paymentLine && paymentLine.payment_method.name === "MercadoPago";
     },
 
+    // Triggered by your custom button click in the XML
     async startMercadoPago() {
+        // ... (Your existing logic matches perfectly here)
         if (!this.isMercadoPago || this.mpState.status === "pending") {
             return;
         }
 
         try {
             this.mpState.status = "loading";
-
-            const order = this.env.pos.get_order();
+            // Use this.currentOrder which is available in PaymentScreen
+            const order = this.currentOrder; 
             const amount = order.get_due();
 
             const result = await this.rpc("/mp/pos/create", {
                 amount,
                 description: order.name,
                 order_uid: order.uid,
+                pos_client_ref: order.name // Ensure unique ref
             });
 
             if (result.status !== "success") {
@@ -50,7 +58,7 @@ const mercadopagoExtension = {
             }
 
             this.mpState.status = "pending";
-            this.mpState.qr_url = result.qr_url;
+            this.mpState.qr_url = result.qr_data;
             this.mpState.payment_id = result.payment_id;
 
             this.pollStatus();
@@ -59,73 +67,35 @@ const mercadopagoExtension = {
             console.error("MercadoPago error:", err);
             this.mpState.status = "error";
             this.mpState.error = "Unexpected error";
-            this.notification.add("Unexpected error", { type: "danger" });
+            this.notification.add("Error connecting to MercadoPago", { type: "danger" });
         }
     },
 
     async pollStatus() {
-        if (!this.mpState.payment_id) {
-            return;
-        }
+        // ... (Your polling logic is correct)
+        if (!this.mpState.payment_id) return;
 
-        const result = await this.rpc("/mp/pos/status", {
-            payment_id: this.mpState.payment_id,
-        });
+        try {
+            const result = await this.rpc("/mp/pos/status", {
+                payment_id: this.mpState.payment_id,
+            });
 
-        if (result.payment_status === "approved") {
-            this.mpState.status = "approved";
-            this.notification.add("Payment approved", { type: "success" });
-            return;
-        }
+            if (result.payment_status === "approved") {
+                this.mpState.status = "approved";
+                this.notification.add("Payment approved", { type: "success" });
+                // Optional: Automatically validate the payment line here
+                // this.currentOrder.selected_paymentline.set_payment_status('done');
+                return;
+            }
 
-        if (result.payment_status === "pending") {
-            setTimeout(() => this.pollStatus(), 2000);
-        } else {
-            this.mpState.status = "error";
-            this.mpState.error = "Payment " + result.payment_status;
+            if (result.payment_status === "pending") {
+                setTimeout(() => this.pollStatus(), 2000);
+            } else {
+                this.mpState.status = "error";
+                this.mpState.error = "Payment " + result.payment_status;
+            }
+        } catch (e) {
+            console.error("Polling error", e);
         }
     },
-};
-
-const componentPaths = {
-    PaymentLine: [
-        "@point_of_sale/app/generic_components/paymentline/paymentline",
-        "@point_of_sale/app/generic_components/payment_line/payment_line",
-        "@point_of_sale/app/screens/payment_screen/payment_line/payment_line",
-        "@point_of_sale/app/screens/payment_screen/paymentline/paymentline",
-        "@point_of_sale/app/screens/payment/payment_line",
-    ],
-    PaymentScreen: [
-        "@point_of_sale/app/screens/payment_screen/payment_screen",
-        "@point_of_sale/app/screens/payment/payment",
-        "@point_of_sale/app/screens/paymentscreen/paymentscreen",
-    ],
-};
-
-async function tryPatchComponents() {
-    let patched = false;
-
-    for (const [componentName, paths] of Object.entries(componentPaths)) {
-        for (const path of paths) {
-            try {
-                const module = await import(path);
-                const Component = module[componentName] || module.default;
-                if (Component) {
-                    patch(Component.prototype, mercadopagoExtension);
-                    console.log(`Successfully patched ${componentName} from:`, path);
-                    patched = true;
-                    break;
-                }
-            } catch (err) {
-                continue;
-            }
-        }
-        if (patched) break;
-    }
-
-    if (!patched) {
-        console.warn("Could not find any component to patch. MercadoPago may not work.");
-    }
-}
-
-tryPatchComponents();
+});
