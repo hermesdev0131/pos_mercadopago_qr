@@ -5,7 +5,9 @@ class MPTransaction(models.Model):
     _rec_name = 'mp_payment_id'
     _description = 'MercadoPago POS Transaction'
 
-    pos_order_id = fields.Many2one('pos.order')
-    mp_payment_id = fields.Char(index=True)
-    status = fields.Char()
-    raw_data = fields.Text()
+    pos_order_id = fields.Many2one('pos.order', string="POS Order")
+    mp_payment_id = fields.Char(index=True, string="MP Payment ID")
+    external_reference = fields.Char(index=True, string="External Reference")
+    qr_data = fields.Char(string="QR Data")
+    status = fields.Char(string="Status")
+    raw_data = fields.Text(string="Raw Response JSON")
