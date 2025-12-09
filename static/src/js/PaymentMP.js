@@ -9,18 +9,19 @@ console.log("MercadoPago POS Module Loaded OK");
 
 patch(PaymentScreen.prototype, {
     setup() {
-        // 1. CRITICAL: Call the original setup to initialize 'this.pos', 'this.ui', etc.
-        // We use optional chaining (?.) to prevent crashing if it's missing (though it shouldn't be).
+        // 1. CRITICAL: Run the original setup first!
+        // This initializes 'this.pos', 'this.ui', 'this.payment_methods', etc.
+        // We use optional chaining (?.) to prevent crashes if it's missing.
         this._super?.(...arguments);
 
-        // 2. Define our custom services with unique names
+        // 2. Define OUR custom services (using unique names to avoid conflicts)
         this.mpOrm = useService("orm");
         this.mpNotification = useService("notification");
         
-        // We do NOT need to define 'this.ui' or 'this.pos' anymore 
-        // because _super() handles that for us.
+        // Note: We do NOT need to define 'this.ui' or 'this.pos' manually 
+        // because _super() handles that for us now.
 
-        // 3. Our custom state
+        // 3. Initialize our state
         this.mpState = useState({
             status: "idle",
             qr_url: null,
@@ -30,7 +31,7 @@ patch(PaymentScreen.prototype, {
     },
 
     get isMercadoPago() {
-        // Use the standard 'this.pos' which is now available via _super()
+        // Use 'this.pos' which is now available thanks to _super()
         const order = this.pos.get_order();
         if (!order) return false;
 
