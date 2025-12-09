@@ -19,7 +19,7 @@ try {
         this.notification = useService("notification");
 
         this.mpState = useState({
-            visible: true,
+            visible: false,
             status: "idle",
             qr_url: null,
             payment_id: null,
@@ -40,6 +40,12 @@ try {
         const line = this._getSelectedPaymentLine();
         const isSelected = line && line.payment_method?.name === "MercadoPago";
         console.log("isMPSelected check:", { isSelected, line: line?.payment_method?.name });
+        
+        if (isSelected && !this.mpState.visible) {
+            console.log("MercadoPago selected - showing overlay");
+            this.showMPOverlay();
+        }
+        
         return isSelected;
     },
 

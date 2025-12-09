@@ -4,7 +4,7 @@
     <!-- Overlay component -->
     <t t-name="pos_mercadopago_qr.MPOverlay">
         <div style="background: red; padding: 20px; position: absolute; top: 0; left: 0; z-index: 10000;">
-            DEBUG: mpState.status = <t t-esc="mpState.status"/>, visible = <t t-esc="mpState.visible"/>
+            DEBUG: status = <t t-esc="this.mpState.status"/>, visible = <t t-esc="this.mpState.visible"/>
         </div>
         <div class="mpqr-overlay d-flex align-items-center justify-content-center"
              style="position:absolute; inset:0; background:rgba(0,0,0,0.7); z-index:9999;">
@@ -12,37 +12,37 @@
                 <h3 style="color:#0099ff;">MercadoPago</h3>
 
                 <!-- idle -->
-                <t t-if="mpState.status == 'idle'">
+                <t t-if="this.mpState.status == 'idle'">
                     <button class="btn btn-primary w-100" t-on-click.prevent="startMP">
                         Generate QR
                     </button>
                 </t>
 
                 <!-- loading -->
-                <t t-if="mpState.status == 'loading'">
+                <t t-if="this.mpState.status == 'loading'">
                     <i class="fa fa-spinner fa-spin fa-3x"/>
                     <p>Connecting...</p>
                 </t>
 
                 <!-- pending -->
-                <t t-if="mpState.status == 'pending'">
-                    <img t-att-src="mpState.qr_url"
+                <t t-if="this.mpState.status == 'pending'">
+                    <img t-att-src="this.mpState.qr_url"
                          style="width:220px;height:220px;object-fit:contain;border:1px solid #ccc;border-radius:8px;"/>
                     <p>Scan the QR with MercadoPago</p>
                 </t>
 
                 <!-- approved -->
-                <t t-if="mpState.status == 'approved'">
+                <t t-if="this.mpState.status == 'approved'">
                     <i class="fa fa-check-circle fa-4x text-success"/>
                     <h4>Payment Approved</h4>
                     <button class="btn btn-success w-100" t-on-click="hideMPOverlay">OK</button>
                 </t>
 
                 <!-- error -->
-                <t t-if="mpState.status == 'error'">
+                <t t-if="this.mpState.status == 'error'">
                     <i class="fa fa-exclamation-triangle fa-3x text-danger"/>
-                    <p><t t-esc="mpState.error"/></p>
-                    <button class="btn btn-secondary w-100" t-on-click="() => mpState.status = 'idle'">Retry</button>
+                    <p><t t-esc="this.mpState.error"/></p>
+                    <button class="btn btn-secondary w-100" t-on-click="() => this.mpState.status = 'idle'">Retry</button>
                 </t>
             </div>
         </div>
@@ -53,15 +53,9 @@
        t-inherit="point_of_sale.PaymentScreen"
        t-inherit-mode="extension">
 
-        <!-- Ensure screen is position:relative -->
-        <xpath expr="//div[hasclass('payment-screen')]" position="attributes">
-            <attribute name="style">position:relative;</attribute>
-        </xpath>
-
-        <!-- Insert overlay at end -->
-        <xpath expr="//div[hasclass('payment-screen')]" position="inside">
-            <div style="display:none;" t-on-mount="() => console.log('PaymentScreen template mounted, mpState:', mpState)"/>
-            <t t-if="mpState">
+        <!-- Append overlay as last child -->
+        <xpath expr="." position="inside">
+            <t t-if="this.mpState and this.mpState.visible">
                 <t t-call="pos_mercadopago_qr.MPOverlay" t-pass="*"/>
             </t>
         </xpath>
