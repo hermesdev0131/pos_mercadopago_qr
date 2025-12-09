@@ -28,6 +28,18 @@ try {
         });
     },
 
+    selectPaymentMethod(method) {
+        console.log("selectPaymentMethod called, method:", method?.name);
+        super.selectPaymentMethod(...arguments);
+        
+        if (method?.name === "MercadoPago") {
+            console.log("MercadoPago selected!");
+            this.showMPOverlay();
+        } else {
+            this.hideMPOverlay();
+        }
+    },
+
     // --- Helpers ---
     _getSelectedPaymentLine() {
         const order = this.currentOrder;
