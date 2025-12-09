@@ -9,12 +9,13 @@ console.log("MercadoPago POS Module Loaded OK");
 
 patch(PaymentScreen.prototype, {
     setup() {
-        // We define the services we need.
+        // Essential services
         this.orm = useService("orm");
         this.notification = useService("notification");
+        this.ui = useService("ui");
         
-        // FIX: Explicitly load the 'ui' service to prevent the 'isSmall' error
-        this.ui = useService("ui"); 
+        // Ensure POS service is available (Critical for currentOrder)
+        this.pos = useService("pos"); 
 
         this.mpState = useState({
             status: "idle",
@@ -25,27 +26,35 @@ patch(PaymentScreen.prototype, {
     },
 
     get isMercadoPago() {
-        const paymentLine = this.currentOrder.paymentLines.find(line => line.selected);
-        // Ensure this string matches your Payment Method name in Odoo exactly
-        return paymentLine && paymentLine.payment_method.name === "MercadoPago";
+        // Defensive check: Ensure order exists
+        const order = this.currentOrder;
+        if (!order) return false;
+
+        // Check for payment lines (handle different property names in Odoo versions)
+        const lines = order.paymentLines || order.payment_lines || [];
+        const paymentLine = lines.find(line => line.selected);
+        
+        return paymentLine && paymentLine.payment_method && paymentLine.payment_method.name === "MercadoPago";
+    },
+
+    get currentOrder() {
+        // Explicit getter to ensure we always get the active order
+        return this.pos.get_order();
     },
 
     async startMercadoPago() {
-        if (!this.isMercadoPago || this.mpState.status === "pending") {
-            return;
-        }
+        if (!this.isMercadoPago || this.mpState.status === "pending") return;
 
         try {
             this.mpState.status = "loading";
             const order = this.currentOrder;
             const amount = order.get_due();
             
-            // Get the ID of the payment method to pass to backend
-            // We use optional chaining (?.) just in case
-            const selectedLine = order.paymentLines.find(line => line.selected);
+            // Get selected line safely
+            const lines = order.paymentLines || order.payment_lines || [];
+            const selectedLine = lines.find(line => line.selected);
+            
             if (!selectedLine) return;
-
-            const payment_method_id = selectedLine.payment_method.id;
 
             const result = await this.orm.call(
                 "pos.payment.method", 
@@ -55,7 +64,7 @@ patch(PaymentScreen.prototype, {
                     amount: amount,
                     description: order.name,
                     pos_client_ref: order.name,
-                    payment_method_id: payment_method_id
+                    payment_method_id: selectedLine.payment_method.id
                 }
             );
 
@@ -76,7 +85,6 @@ patch(PaymentScreen.prototype, {
             console.error("MercadoPago error:", err);
             this.mpState.status = "error";
             this.mpState.error = "Unexpected error";
-            this.notification.add("Connection Error", { type: "danger" });
         }
     },
 
@@ -95,7 +103,8 @@ patch(PaymentScreen.prototype, {
                 this.mpState.status = "approved";
                 this.notification.add("Payment approved", { type: "success" });
                 
-                const line = this.currentOrder.paymentLines.find(l => l.selected);
+                const lines = this.currentOrder.paymentLines || this.currentOrder.payment_lines || [];
+                const line = lines.find(l => l.selected);
                 if (line) {
                     line.set_payment_status('done');
                 }
