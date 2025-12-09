@@ -1,0 +1,1 @@
+# l10n_ar_pos_mercado_pago
