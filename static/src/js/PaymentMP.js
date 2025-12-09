@@ -9,9 +9,12 @@ console.log("MercadoPago POS Module Loaded OK");
 
 patch(PaymentScreen.prototype, {
     setup() {
-        // removed this._super to fix the previous TypeError
-        this.orm = useService("orm"); // <--- CHANGED from 'rpc' to 'orm'
+        // We define the services we need.
+        this.orm = useService("orm");
         this.notification = useService("notification");
+        
+        // FIX: Explicitly load the 'ui' service to prevent the 'isSmall' error
+        this.ui = useService("ui"); 
 
         this.mpState = useState({
             status: "idle",
@@ -23,7 +26,7 @@ patch(PaymentScreen.prototype, {
 
     get isMercadoPago() {
         const paymentLine = this.currentOrder.paymentLines.find(line => line.selected);
-        // Ensure this matches the exact name in Odoo Backend -> POS -> Payment Methods
+        // Ensure this string matches your Payment Method name in Odoo exactly
         return paymentLine && paymentLine.payment_method.name === "MercadoPago";
     },
 
@@ -38,14 +41,17 @@ patch(PaymentScreen.prototype, {
             const amount = order.get_due();
             
             // Get the ID of the payment method to pass to backend
-            const payment_method_id = order.paymentLines.find(line => line.selected).payment_method.id;
+            // We use optional chaining (?.) just in case
+            const selectedLine = order.paymentLines.find(line => line.selected);
+            if (!selectedLine) return;
 
-            // USE ORM CALL INSTEAD OF RPC ROUTE
+            const payment_method_id = selectedLine.payment_method.id;
+
             const result = await this.orm.call(
-                "pos.payment.method",        // Model Name
-                "create_mp_payment",         // Method Name
-                [],                          // Positional Args (empty)
-                {                            // Keyword Args (kwargs)
+                "pos.payment.method", 
+                "create_mp_payment", 
+                [], 
+                {
                     amount: amount,
                     description: order.name,
                     pos_client_ref: order.name,
@@ -78,7 +84,6 @@ patch(PaymentScreen.prototype, {
         if (!this.mpState.payment_id) return;
 
         try {
-            // USE ORM CALL FOR STATUS CHECK
             const result = await this.orm.call(
                 "pos.payment.method", 
                 "check_mp_status", 
@@ -90,7 +95,6 @@ patch(PaymentScreen.prototype, {
                 this.mpState.status = "approved";
                 this.notification.add("Payment approved", { type: "success" });
                 
-                // Optional: Auto-validate the payment line
                 const line = this.currentOrder.paymentLines.find(l => l.selected);
                 if (line) {
                     line.set_payment_status('done');
