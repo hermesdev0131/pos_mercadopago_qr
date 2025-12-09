@@ -2,40 +2,53 @@
 <templates>
 
     <t t-name="pos_mercadopago_qr.PaymentMethodLineMP">
-        <div class="mp-box" style="margin-bottom: 20px; padding: 15px; background: white; border: 1px solid #ccc; border-radius: 5px; text-align: center;">
+        <div class="mp-card" style="background: white; padding: 30px; border-radius: 10px; box-shadow: 0 4px 20px rgba(0,0,0,0.4); text-align: center; min-width: 300px;">
             
+            <h2 style="margin-top: 0; color: #0099ff;">Mercado Pago</h2>
+            <hr style="margin: 15px 0; border: 0; border-top: 1px solid #eee;"/>
+
             <t t-if="mpState.status == 'idle'">
-                <div class="button highlight" style="padding: 20px; font-size: 20px; background-color: #0099ff; color: white; cursor: pointer;" t-on-click="startMercadoPago">
-                    <i class="fa fa-qrcode"/> Generate QR Code
-                </div>
+                <p>Click below to generate the QR code.</p>
+                <button class="btn btn-primary" 
+                        style="font-size: 18px; padding: 12px 24px; width: 100%; margin-top: 10px;"
+                        t-on-click="startMercadoPago">
+                    Generate QR
+                </button>
             </t>
 
             <t t-if="mpState.status == 'loading'">
-                <div style="font-size: 18px;">
-                    <i class="fa fa-spinner fa-spin"/> Connecting...
+                <div style="padding: 20px;">
+                    <i class="fa fa-spinner fa-spin fa-3x" style="color: #666;"/>
+                    <p style="margin-top: 15px; font-weight: bold;">Connecting...</p>
                 </div>
             </t>
 
             <t t-if="mpState.status == 'pending'">
                 <div>
-                    <div style="font-weight: bold; margin-bottom: 10px;">Scan to Pay</div>
-                    <img t-att-src="mpState.qr_url" style="width: 100%; max-width: 250px; border: 1px solid #eee;"/>
-                    <div style="margin-top: 10px; color: #666;">
+                    <p style="font-weight: bold; margin-bottom: 10px;">Scan to Pay</p>
+                    <div style="border: 2px solid #333; display: inline-block; padding: 5px;">
+                        <img t-att-src="mpState.qr_url" style="width: 200px; height: 200px; object-fit: contain;"/>
+                    </div>
+                    <div style="margin-top: 15px; color: #666;">
                         <i class="fa fa-circle-o-notch fa-spin"/> Waiting for confirmation...
                     </div>
                 </div>
             </t>
 
             <t t-if="mpState.status == 'approved'">
-                <div style="color: green; font-size: 20px; font-weight: bold;">
-                    <i class="fa fa-check-circle"/> Payment Approved
+                <div style="color: green; padding: 20px;">
+                    <i class="fa fa-check-circle fa-4x"/>
+                    <h3 style="margin-top: 15px;">Payment Approved!</h3>
                 </div>
             </t>
 
             <t t-if="mpState.status == 'error'">
-                <div style="color: red;">
-                    <p><t t-esc="mpState.error"/></p>
-                    <div class="button" style="background: #eee; padding: 10px; cursor: pointer;" t-on-click="() => this.mpState.status = 'idle'">Retry</div>
+                <div style="color: #dc3545; padding: 10px;">
+                    <i class="fa fa-exclamation-triangle fa-3x"/>
+                    <p style="margin-top: 10px; font-weight: bold;"><t t-esc="mpState.error"/></p>
+                    <button class="btn btn-secondary" style="margin-top: 10px;" t-on-click="() => this.mpState.status = 'idle'">
+                        Try Again
+                    </button>
                 </div>
             </t>
         </div>
@@ -43,12 +56,20 @@
 
     <t t-name="pos_mercadopago_qr.PaymentScreen" t-inherit="point_of_sale.PaymentScreen" t-inherit-mode="extension">
         
-        <xpath expr="//div[hasclass('next')]" position="before">
+        <xpath expr="//div[hasclass('payment-screen')]" position="inside">
+            
             <t t-if="isMercadoPago">
-                <t t-call="pos_mercadopago_qr.PaymentMethodLineMP"/>
+                <div class="mp-overlay" 
+                     style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
+                            background: rgba(0, 0, 0, 0.7); z-index: 9999; 
+                            display: flex; align-items: center; justify-content: center;">
+                    
+                    <t t-call="pos_mercadopago_qr.PaymentMethodLineMP"/>
+                    
+                </div>
             </t>
+
         </xpath>
-        
     </t>
 
 </templates>
