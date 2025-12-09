@@ -1,6 +1,6 @@
 /** @odoo-module **/
 
-import { PaymentMethodLine } from "@point_of_sale/app/components/payment_method/payment_method_line";
+import { PaymentLines } from "@point_of_sale/app/screens/payment_screen/payment_lines/payment_lines";
 import { patch } from "@web/core/utils/patch";
 import { useService } from "@web/core/utils/hooks";
 import { useState } from "@odoo/owl";
