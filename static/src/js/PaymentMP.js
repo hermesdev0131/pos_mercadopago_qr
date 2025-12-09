@@ -1,13 +1,13 @@
 /** @odoo-module **/
 
-import { PaymentMethodLine } from "@point_of_sale/app/screens/payment_screen/payment_lines/payment_lines";
+import { PaymentLine } from "@point_of_sale/app/generic_components/payment_line/payment_line";
 import { patch } from "@web/core/utils/patch";
 import { useService } from "@web/core/utils/hooks";
 import { useState } from "@odoo/owl";
 
 console.log("MercadoPago POS Module Loaded OK");
 
-patch(PaymentMethodLine.prototype, {
+patch(PaymentLine.prototype, {
 
     setup() {
         this._super(...arguments);
