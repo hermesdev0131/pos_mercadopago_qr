@@ -1,6 +1,4 @@
-from odoo import models, fields
+from odoo import models
 
 class PosPaymentMethod(models.Model):
     _inherit = 'pos.payment.method'
-
-    use_mercadopago = fields.Boolean(string="Use MercadoPago QR")
