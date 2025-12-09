@@ -57,9 +57,10 @@
 
         <!-- Insert overlay at end -->
         <xpath expr="//div[hasclass('payment-screen')]" position="inside">
-            <t t-if="mpOverlayProps">
+            <!-- <t t-if="Props">
                 <MPOverlay t-props="mpOverlayProps"/>
-            </t>
+            </t> -->
+            <t t-call="pos_mercadopago_qr.MPOverlay"/>
         </xpath>
 
     </t>

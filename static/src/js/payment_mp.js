@@ -16,7 +16,7 @@ patch(PaymentScreen.prototype, {
         this.notification = useService("notification");
 
         this.mpState = useState({
-            visible: false,
+            visible: true,
             status: "idle",
             qr_url: null,
             payment_id: null,
