@@ -1,14 +1,12 @@
 /** @odoo-module **/
 
-import { PaymentLine } from "@point_of_sale/app/generic_components/payment_line/payment_line";
 import { patch } from "@web/core/utils/patch";
 import { useService } from "@web/core/utils/hooks";
 import { useState } from "@odoo/owl";
 
 console.log("MercadoPago POS Module Loaded OK");
 
-patch(PaymentLine.prototype, {
-
+const mercadopagoExtension = {
     setup() {
         this._super(...arguments);
         this.rpc = useService("rpc");
@@ -87,5 +85,47 @@ patch(PaymentLine.prototype, {
             this.mpState.error = "Payment " + result.payment_status;
         }
     },
+};
 
-});
+const componentPaths = {
+    PaymentLine: [
+        "@point_of_sale/app/generic_components/paymentline/paymentline",
+        "@point_of_sale/app/generic_components/payment_line/payment_line",
+        "@point_of_sale/app/screens/payment_screen/payment_line/payment_line",
+        "@point_of_sale/app/screens/payment_screen/paymentline/paymentline",
+        "@point_of_sale/app/screens/payment/payment_line",
+    ],
+    PaymentScreen: [
+        "@point_of_sale/app/screens/payment_screen/payment_screen",
+        "@point_of_sale/app/screens/payment/payment",
+        "@point_of_sale/app/screens/paymentscreen/paymentscreen",
+    ],
+};
+
+async function tryPatchComponents() {
+    let patched = false;
+
+    for (const [componentName, paths] of Object.entries(componentPaths)) {
+        for (const path of paths) {
+            try {
+                const module = await import(path);
+                const Component = module[componentName] || module.default;
+                if (Component) {
+                    patch(Component.prototype, mercadopagoExtension);
+                    console.log(`Successfully patched ${componentName} from:`, path);
+                    patched = true;
+                    break;
+                }
+            } catch (err) {
+                continue;
+            }
+        }
+        if (patched) break;
+    }
+
+    if (!patched) {
+        console.warn("Could not find any component to patch. MercadoPago may not work.");
+    }
+}
+
+tryPatchComponents();

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <data>
+        <record id="pos_payment_method_mercadopago_form" model="ir.ui.view">
+            <field name="name">pos.payment.method.mercadopago.form</field>
+            <field name="model">pos.payment.method</field>
+            <field name="inherit_id" ref="point_of_sale.pos_payment_method_form"/>
+            <field name="arch" type="xml">
+                <xpath expr="//group" position="inside">
+                    <field name="use_mercadopago"/>
+                </xpath>
+            </field>
+        </record>
+    </data>
+</odoo>

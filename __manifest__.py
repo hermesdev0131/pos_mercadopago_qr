@@ -9,6 +9,7 @@
     'data': [
         'security/ir.model.access.csv',
         'views/mp_settings_view.xml',
+        'views/pos_payment_method_view.xml',
     ],
     'assets': {
         'point_of_sale.assets_prod': [
