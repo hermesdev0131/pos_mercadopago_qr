@@ -2,18 +2,16 @@
 
 import { PaymentScreen } from "@point_of_sale/app/screens/payment_screen/payment_screen";
 import { patch } from "@web/core/utils/patch";
+import { useService } from "@web/core/utils/hooks";
 import { useState } from "@odoo/owl";
 
 console.log("MercadoPago POS Module Loaded OK");
 
-const originalSetup = PaymentScreen.prototype.setup;
-
 patch(PaymentScreen.prototype, {
     setup() {
-        originalSetup.call(this);
-        
-        this.rpc = this.env.services.rpc;
-        this.notification = this.env.services.notification;
+        // removed this._super to fix the previous TypeError
+        this.orm = useService("orm"); // <--- CHANGED from 'rpc' to 'orm'
+        this.notification = useService("notification");
 
         this.mpState = useState({
             status: "idle",
@@ -23,31 +21,37 @@ patch(PaymentScreen.prototype, {
         });
     },
 
-    // Helper to identify if the currently selected payment method is MP
     get isMercadoPago() {
         const paymentLine = this.currentOrder.paymentLines.find(line => line.selected);
+        // Ensure this matches the exact name in Odoo Backend -> POS -> Payment Methods
         return paymentLine && paymentLine.payment_method.name === "MercadoPago";
     },
 
-    // Triggered by your custom button click in the XML
     async startMercadoPago() {
-        // ... (Your existing logic matches perfectly here)
         if (!this.isMercadoPago || this.mpState.status === "pending") {
             return;
         }
 
         try {
             this.mpState.status = "loading";
-            // Use this.currentOrder which is available in PaymentScreen
-            const order = this.currentOrder; 
+            const order = this.currentOrder;
             const amount = order.get_due();
+            
+            // Get the ID of the payment method to pass to backend
+            const payment_method_id = order.paymentLines.find(line => line.selected).payment_method.id;
 
-            const result = await this.rpc("/mp/pos/create", {
-                amount,
-                description: order.name,
-                order_uid: order.uid,
-                pos_client_ref: order.name // Ensure unique ref
-            });
+            // USE ORM CALL INSTEAD OF RPC ROUTE
+            const result = await this.orm.call(
+                "pos.payment.method",        // Model Name
+                "create_mp_payment",         // Method Name
+                [],                          // Positional Args (empty)
+                {                            // Keyword Args (kwargs)
+                    amount: amount,
+                    description: order.name,
+                    pos_client_ref: order.name,
+                    payment_method_id: payment_method_id
+                }
+            );
 
             if (result.status !== "success") {
                 this.mpState.status = "error";
@@ -66,29 +70,36 @@ patch(PaymentScreen.prototype, {
             console.error("MercadoPago error:", err);
             this.mpState.status = "error";
             this.mpState.error = "Unexpected error";
-            this.notification.add("Error connecting to MercadoPago", { type: "danger" });
+            this.notification.add("Connection Error", { type: "danger" });
         }
     },
 
     async pollStatus() {
-        // ... (Your polling logic is correct)
         if (!this.mpState.payment_id) return;
 
         try {
-            const result = await this.rpc("/mp/pos/status", {
-                payment_id: this.mpState.payment_id,
-            });
+            // USE ORM CALL FOR STATUS CHECK
+            const result = await this.orm.call(
+                "pos.payment.method", 
+                "check_mp_status", 
+                [], 
+                { payment_id: this.mpState.payment_id }
+            );
 
             if (result.payment_status === "approved") {
                 this.mpState.status = "approved";
                 this.notification.add("Payment approved", { type: "success" });
-                // Optional: Automatically validate the payment line here
-                // this.currentOrder.selected_paymentline.set_payment_status('done');
+                
+                // Optional: Auto-validate the payment line
+                const line = this.currentOrder.paymentLines.find(l => l.selected);
+                if (line) {
+                    line.set_payment_status('done');
+                }
                 return;
             }
 
             if (result.payment_status === "pending") {
-                setTimeout(() => this.pollStatus(), 2000);
+                setTimeout(() => this.pollStatus(), 3000);
             } else {
                 this.mpState.status = "error";
                 this.mpState.error = "Payment " + result.payment_status;
