@@ -9,37 +9,37 @@
                 <h3 style="color:#0099ff;">MercadoPago</h3>
 
                 <!-- idle -->
-                <t t-if="props.status == 'idle'">
-                    <button class="btn btn-primary w-100" t-on-click="props.onStart">
+                <t t-if="mpState.status == 'idle'">
+                    <button class="btn btn-primary w-100" t-on-click.prevent="startMP">
                         Generate QR
                     </button>
                 </t>
 
                 <!-- loading -->
-                <t t-if="props.status == 'loading'">
+                <t t-if="mpState.status == 'loading'">
                     <i class="fa fa-spinner fa-spin fa-3x"/>
                     <p>Connecting...</p>
                 </t>
 
                 <!-- pending -->
-                <t t-if="props.status == 'pending'">
-                    <img t-att-src="props.qr_url"
+                <t t-if="mpState.status == 'pending'">
+                    <img t-att-src="mpState.qr_url"
                          style="width:220px;height:220px;object-fit:contain;border:1px solid #ccc;border-radius:8px;"/>
                     <p>Scan the QR with MercadoPago</p>
                 </t>
 
                 <!-- approved -->
-                <t t-if="props.status == 'approved'">
+                <t t-if="mpState.status == 'approved'">
                     <i class="fa fa-check-circle fa-4x text-success"/>
                     <h4>Payment Approved</h4>
-                    <button class="btn btn-success w-100" t-on-click="props.onClose">OK</button>
+                    <button class="btn btn-success w-100" t-on-click="hideMPOverlay">OK</button>
                 </t>
 
                 <!-- error -->
-                <t t-if="props.status == 'error'">
+                <t t-if="mpState.status == 'error'">
                     <i class="fa fa-exclamation-triangle fa-3x text-danger"/>
-                    <p><t t-esc="props.error"/></p>
-                    <button class="btn btn-secondary w-100" t-on-click="props.onRetry">Retry</button>
+                    <p><t t-esc="mpState.error"/></p>
+                    <button class="btn btn-secondary w-100" t-on-click="() => mpState.status = 'idle'">Retry</button>
                 </t>
             </div>
         </div>
@@ -57,10 +57,9 @@
 
         <!-- Insert overlay at end -->
         <xpath expr="//div[hasclass('payment-screen')]" position="inside">
-            <!-- <t t-if="Props">
-                <MPOverlay t-props="mpOverlayProps"/>
-            </t> -->
-            <t t-call="pos_mercadopago_qr.MPOverlay"/>
+            <t t-if="mpState and mpState.visible">
+                <t t-call="pos_mercadopago_qr.MPOverlay" t-pass="*"/>
+            </t>
         </xpath>
 
     </t>
