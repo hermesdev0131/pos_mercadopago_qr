@@ -2,7 +2,6 @@
 
 import { PaymentScreen } from "@point_of_sale/app/screens/payment_screen/payment_screen";
 import { patch } from "@web/core/utils/patch";
-import { useService } from "@web/core/utils/hooks";
 import { useState } from "@odoo/owl";
 
 console.log("MercadoPago POS Module Loaded OK");
@@ -12,8 +11,9 @@ const originalSetup = PaymentScreen.prototype.setup;
 patch(PaymentScreen.prototype, {
     setup() {
         originalSetup.call(this);
-        this.rpc = useService("rpc");
-        this.notification = useService("notification");
+        
+        this.rpc = this.env.services.rpc;
+        this.notification = this.env.services.notification;
 
         this.mpState = useState({
             status: "idle",
