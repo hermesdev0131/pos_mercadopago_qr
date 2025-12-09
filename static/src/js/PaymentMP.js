@@ -3,19 +3,18 @@
 import { PaymentScreen } from "@point_of_sale/app/screens/payment_screen/payment_screen";
 import { patch } from "@web/core/utils/patch";
 import { useService } from "@web/core/utils/hooks";
-import { useState, onMounted } from "@odoo/owl";
+import { useState } from "@odoo/owl";
 
 console.log("MercadoPago POS Module Loaded OK");
 
-// Patch the PaymentScreen directly. 
-// This is the main controller for the payment view.
+const originalSetup = PaymentScreen.prototype.setup;
+
 patch(PaymentScreen.prototype, {
     setup() {
-        this._super(...arguments);
+        originalSetup.call(this);
         this.rpc = useService("rpc");
         this.notification = useService("notification");
 
-        // Define the reactive state for your MercadoPago UI
         this.mpState = useState({
             status: "idle",
             qr_url: null,
