@@ -1,41 +1,39 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <templates>
 
-    <!-- Extend the PaymentMethodLine component -->
-    <t t-name="pos_mercadopago_qr.PaymentMethodLineMP" t-inherit="point_of_sale.PaymentMethodLine" t-operation="inside">
-        <t t-if="isMercadoPago">
-            <div class="mp-box o_pos_paymentline_extra">
-                <t t-if="mpState.status == 'idle'">
-                    <button type="button"
-                            class="btn btn-primary"
-                            t-on-click="startMercadoPago">
-                        Generate MercadoPago QR
-                    </button>
-                </t>
+    <!-- MercadoPago Payment UI -->
+    <t t-name="pos_mercadopago_qr.PaymentMethodLineMP">
+        <div class="mp-box o_pos_paymentline_extra">
+            <t t-if="mpState.status == 'idle'">
+                <button type="button"
+                        class="btn btn-primary"
+                        t-on-click="startMercadoPago">
+                    Generate MercadoPago QR
+                </button>
+            </t>
 
-                <t t-if="mpState.status == 'loading'">
-                    <span>Generating QR...</span>
-                </t>
+            <t t-if="mpState.status == 'loading'">
+                <span>Generating QR...</span>
+            </t>
 
-                <t t-if="mpState.status == 'pending'">
-                    <p>Ask the customer to scan the QR:</p>
-                    <img t-att-src="mpState.qr_url" style="max-width: 200px; max-height: 200px;"/>
-                    <p>Waiting for payment confirmation...</p>
-                </t>
+            <t t-if="mpState.status == 'pending'">
+                <p>Ask the customer to scan the QR:</p>
+                <img t-att-src="mpState.qr_url" style="max-width: 200px; max-height: 200px;"/>
+                <p>Waiting for payment confirmation...</p>
+            </t>
 
-                <t t-if="mpState.status == 'approved'">
-                    <p style="color: green; font-weight: bold;">
-                        Payment approved by MercadoPago.
-                    </p>
-                </t>
+            <t t-if="mpState.status == 'approved'">
+                <p style="color: green; font-weight: bold;">
+                    Payment approved by MercadoPago.
+                </p>
+            </t>
 
-                <t t-if="mpState.status == 'error'">
-                    <p style="color: red;">
-                        <t t-esc="mpState.error"/>
-                    </p>
-                </t>
-            </div>
-        </t>
+            <t t-if="mpState.status == 'error'">
+                <p style="color: red;">
+                    <t t-esc="mpState.error"/>
+                </p>
+            </t>
+        </div>
     </t>
 
 </templates>

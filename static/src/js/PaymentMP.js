@@ -28,6 +28,13 @@ patch(PaymentMethodLine.prototype, {
         return pm && pm.name === "MercadoPago";
     },
 
+    get template() {
+        if (this.isMercadoPago) {
+            return "pos_mercadopago_qr.PaymentMethodLineMP";
+        }
+        return this._super(...arguments);
+    },
+
     async startMercadoPago() {
         if (!this.isMercadoPago || this.mpState.status === "pending") {
             return;
