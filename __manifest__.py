@@ -11,9 +11,13 @@
         'views/mp_settings_view.xml',
     ],
     'assets': {
-        'point_of_sale._assets_pos': [
-            'pos_mercadopago_qr/static/src/js/*.js',
-            'pos_mercadopago_qr/static/src/xml/*.xml',
+        'point_of_sale.assets_prod': [
+            'pos_mercadopago_qr/static/src/js/PaymentMP.js',
+            'pos_mercadopago_qr/static/src/xml/PaymentMP.xml',
+        ],
+        'point_of_sale.assets_debug': [
+            'pos_mercadopago_qr/static/src/js/PaymentMP.js',
+            'pos_mercadopago_qr/static/src/xml/PaymentMP.xml',
         ],
     },
     'installable': True,
