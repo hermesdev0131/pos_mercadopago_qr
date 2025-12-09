@@ -3,6 +3,9 @@
 
     <!-- Overlay component -->
     <t t-name="pos_mercadopago_qr.MPOverlay">
+        <div style="background: red; padding: 20px; position: absolute; top: 0; left: 0; z-index: 10000;">
+            DEBUG: mpState.status = <t t-esc="mpState.status"/>, visible = <t t-esc="mpState.visible"/>
+        </div>
         <div class="mpqr-overlay d-flex align-items-center justify-content-center"
              style="position:absolute; inset:0; background:rgba(0,0,0,0.7); z-index:9999;">
             <div class="mpqr-card bg-white p-4 rounded-4 text-center" style="min-width:320px;">
@@ -57,7 +60,8 @@
 
         <!-- Insert overlay at end -->
         <xpath expr="//div[hasclass('payment-screen')]" position="inside">
-            <t t-if="mpState and mpState.visible">
+            <div style="display:none;" t-on-mount="() => console.log('PaymentScreen template mounted, mpState:', mpState)"/>
+            <t t-if="mpState">
                 <t t-call="pos_mercadopago_qr.MPOverlay" t-pass="*"/>
             </t>
         </xpath>
