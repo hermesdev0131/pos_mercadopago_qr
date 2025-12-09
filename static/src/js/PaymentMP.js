@@ -1,11 +1,11 @@
 /** @odoo-module **/
 
-import { PaymentMethodLine } from "@point_of_sale/app/screens/payment_screen/payment_method_line";
+import { PaymentMethodLine } from "@point_of_sale/app/components/payment_method/payment_method_line";
 import { patch } from "@web/core/utils/patch";
 import { useService } from "@web/core/utils/hooks";
 import { useState } from "@odoo/owl";
 
-console.log("MercadoPago POS Module Loaded");
+console.log("MercadoPago POS Module Loaded OK");
 
 patch(PaymentMethodLine.prototype, {
 
@@ -15,7 +15,7 @@ patch(PaymentMethodLine.prototype, {
         this.notification = useService("notification");
 
         this.mpState = useState({
-            status: "idle",   // idle | loading | pending | approved | error
+            status: "idle",
             qr_url: null,
             payment_id: null,
             error: null,
@@ -23,16 +23,8 @@ patch(PaymentMethodLine.prototype, {
     },
 
     get isMercadoPago() {
-        // paymentMethod is available in props in new POS
         const pm = this.paymentMethod || this.props.paymentMethod;
         return pm && pm.name === "MercadoPago";
-    },
-
-    get template() {
-        if (this.isMercadoPago) {
-            return "pos_mercadopago_qr.PaymentMethodLineMP";
-        }
-        return this._super(...arguments);
     },
 
     async startMercadoPago() {
@@ -42,21 +34,20 @@ patch(PaymentMethodLine.prototype, {
 
         try {
             this.mpState.status = "loading";
-            this.mpState.error = null;
 
             const order = this.env.pos.get_order();
-            const amount = order.get_due(); // amount to pay with this method
+            const amount = order.get_due();
 
             const result = await this.rpc("/mp/pos/create", {
-                amount: amount,
-                description: order.name || "POS Order",
+                amount,
+                description: order.name,
                 order_uid: order.uid,
             });
 
             if (result.status !== "success") {
                 this.mpState.status = "error";
-                this.mpState.error = result.details || "Error creating payment.";
-                this.notification.add(this.mpState.error, { type: "danger" });
+                this.mpState.error = result.details;
+                this.notification.add(result.details, { type: "danger" });
                 return;
             }
 
@@ -64,13 +55,13 @@ patch(PaymentMethodLine.prototype, {
             this.mpState.qr_url = result.qr_url;
             this.mpState.payment_id = result.payment_id;
 
-            // Start polling
             this.pollStatus();
+
         } catch (err) {
-            console.error("MercadoPago start error", err);
+            console.error("MercadoPago error:", err);
             this.mpState.status = "error";
-            this.mpState.error = "Unexpected error starting MercadoPago payment.";
-            this.notification.add(this.mpState.error, { type: "danger" });
+            this.mpState.error = "Unexpected error";
+            this.notification.add("Unexpected error", { type: "danger" });
         }
     },
 
@@ -79,38 +70,22 @@ patch(PaymentMethodLine.prototype, {
             return;
         }
 
-        try {
-            const result = await this.rpc("/mp/pos/status", {
-                payment_id: this.mpState.payment_id,
-            });
+        const result = await this.rpc("/mp/pos/status", {
+            payment_id: this.mpState.payment_id,
+        });
 
-            if (result.status !== "success") {
-                this.mpState.status = "error";
-                this.mpState.error = result.details || "Error checking payment status.";
-                this.notification.add(this.mpState.error, { type: "danger" });
-                return;
-            }
+        if (result.payment_status === "approved") {
+            this.mpState.status = "approved";
+            this.notification.add("Payment approved", { type: "success" });
+            return;
+        }
 
-            const payStatus = result.payment_status;
-            if (payStatus === "approved") {
-                this.mpState.status = "approved";
-                this.notification.add("MercadoPago payment approved.", { type: "success" });
-
-                // When approved, we can auto-validate the order from PaymentScreen,
-                // but from here we just trust the cashier to press Validate.
-            } else if (payStatus === "pending") {
-                // continue polling
-                setTimeout(() => this.pollStatus(), 3000);
-            } else {
-                this.mpState.status = "error";
-                this.mpState.error = "Payment " + payStatus;
-                this.notification.add(this.mpState.error, { type: "warning" });
-            }
-        } catch (err) {
-            console.error("MercadoPago poll error", err);
+        if (result.payment_status === "pending") {
+            setTimeout(() => this.pollStatus(), 2000);
+        } else {
             this.mpState.status = "error";
-            this.mpState.error = "Unexpected error checking payment.";
-            this.notification.add(this.mpState.error, { type: "danger" });
+            this.mpState.error = "Payment " + result.payment_status;
         }
     },
+
 });
