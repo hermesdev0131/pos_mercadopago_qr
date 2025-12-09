@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates id="mp_qr_templates" xml_declaration="False">
+
+    <t t-name="pos_mercadopago_qr.MPQRPopup" owl="1">
+        <div class="mpqr-popup">
+            <h2>Mercado Pago</h2>
+
+            <t t-if="props.status === 'loading'">
+                <div class="mpqr-loading">
+                    <span>Connecting...</span>
+                </div>
+            </t>
+
+            <t t-if="props.status === 'pending'">
+                <img t-att-src="props.qr_url" class="mpqr-qr-img"/>
+                <div class="mpqr-wait">Waiting for confirmation...</div>
+            </t>
+
+            <t t-if="props.status === 'approved'">
+                <div class="mpqr-success">Payment Approved</div>
+            </t>
+
+            <t t-if="props.status === 'error'">
+                <div class="mpqr-error">Error: <t t-esc="props.error"/></div>
+            </t>
+
+            <button class="btn btn-secondary" t-on-click="close">Close</button>
+        </div>
+    </t>
+
+</templates>
