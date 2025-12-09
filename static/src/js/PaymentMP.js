@@ -9,11 +9,15 @@ console.log("MercadoPago POS Module Loaded OK");
 
 patch(PaymentScreen.prototype, {
     setup() {
-        // Define services with unique names to avoid overwriting system defaults
+        // 1. Define ORM and Notification for our logic
         this.mpOrm = useService("orm");
         this.mpNotification = useService("notification");
-        this.mpUi = useService("ui");
-        this.mpPos = useService("pos"); // Use mpPos to avoid conflict with this.pos
+        
+        // 2. CRITICAL FIX: Define 'ui' so the original template can read 'this.ui.isSmall'
+        this.ui = useService("ui");
+
+        // 3. CRITICAL FIX: Use a unique name for POS service to avoid breaking original 'this.pos' loops
+        this.mpPos = useService("pos");
 
         this.mpState = useState({
             status: "idle",
@@ -23,13 +27,14 @@ patch(PaymentScreen.prototype, {
         });
     },
 
-    // Getter to safely check for MercadoPago
     get isMercadoPago() {
-        // Use the system's standard currentOrder
-        const order = this.currentOrder; 
+        // Use our safe 'mpPos' accessor
+        const order = this.mpPos.get_order();
         if (!order) return false;
 
-        const paymentLine = order.get_selected_paymentline();
+        const lines = order.paymentLines || order.payment_lines || [];
+        const paymentLine = lines.find(line => line.selected);
+        
         return paymentLine && paymentLine.payment_method && paymentLine.payment_method.name === "MercadoPago";
     },
 
@@ -38,10 +43,12 @@ patch(PaymentScreen.prototype, {
 
         try {
             this.mpState.status = "loading";
-            const order = this.currentOrder; // Use standard Odoo getter
+            const order = this.mpPos.get_order();
             const amount = order.get_due();
             
-            const selectedLine = order.get_selected_paymentline();
+            const lines = order.paymentLines || order.payment_lines || [];
+            const selectedLine = lines.find(line => line.selected);
+            
             if (!selectedLine) return;
 
             const result = await this.mpOrm.call(
@@ -91,8 +98,9 @@ patch(PaymentScreen.prototype, {
                 this.mpState.status = "approved";
                 this.mpNotification.add("Payment approved", { type: "success" });
                 
-                const order = this.currentOrder;
-                const line = order.get_selected_paymentline();
+                const order = this.mpPos.get_order();
+                const lines = order.paymentLines || order.payment_lines || [];
+                const line = lines.find(l => l.selected);
                 if (line) {
                     line.set_payment_status('done');
                 }
