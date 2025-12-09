@@ -9,19 +9,14 @@ console.log("MercadoPago POS Module Loaded OK");
 
 patch(PaymentScreen.prototype, {
     setup() {
-        // 1. CRITICAL: Run the original setup first!
-        // This initializes 'this.pos', 'this.ui', 'this.payment_methods', etc.
-        // We use optional chaining (?.) to prevent crashes if it's missing.
-        this._super?.(...arguments);
+        // IMPORTANT: keep the original logic
+        super.setup(...arguments);
 
-        // 2. Define OUR custom services (using unique names to avoid conflicts)
+        // Extra services just for our module
         this.mpOrm = useService("orm");
         this.mpNotification = useService("notification");
-        
-        // Note: We do NOT need to define 'this.ui' or 'this.pos' manually 
-        // because _super() handles that for us now.
 
-        // 3. Initialize our state
+        // Local reactive state for MercadoPago
         this.mpState = useState({
             status: "idle",
             qr_url: null,
@@ -31,45 +26,78 @@ patch(PaymentScreen.prototype, {
     },
 
     get isMercadoPago() {
-        // Use 'this.pos' which is now available thanks to _super()
-        const order = this.pos.get_order();
-        if (!order) return false;
+        // Use the PaymentScreen API from Odoo
+        const order = this.currentOrder;
+        if (!order) {
+            return false;
+        }
 
-        const lines = order.paymentLines || order.payment_lines || [];
-        const paymentLine = lines.find(line => line.selected);
-        
-        return paymentLine && paymentLine.payment_method && paymentLine.payment_method.name === "MercadoPago";
+        // Try both shapes, depending on POS version
+        const lines =
+            order.paymentLines ||
+            order.payment_lines ||
+            [];
+
+        const paymentLine = lines.find((line) => line.selected);
+
+        return (
+            paymentLine &&
+            paymentLine.payment_method &&
+            paymentLine.payment_method.name === "MercadoPago"
+        );
     },
 
     async startMercadoPago() {
-        if (!this.isMercadoPago || this.mpState.status === "pending") return;
+        if (!this.isMercadoPago || this.mpState.status === "pending") {
+            return;
+        }
 
         try {
             this.mpState.status = "loading";
-            const order = this.pos.get_order();
-            const amount = order.get_due();
-            
-            const lines = order.paymentLines || order.payment_lines || [];
-            const selectedLine = lines.find(line => line.selected);
-            
-            if (!selectedLine) return;
+            this.mpState.error = null;
+
+            const order = this.currentOrder;
+            if (!order) {
+                this.mpState.status = "error";
+                this.mpState.error = "No current order.";
+                return;
+            }
+
+            const amount = order.get_due
+                ? order.get_due()
+                : order.get_total_with_tax
+                ? order.get_total_with_tax()
+                : 0;
+
+            const lines =
+                order.paymentLines ||
+                order.payment_lines ||
+                [];
+            const selectedLine = lines.find((line) => line.selected);
+            if (!selectedLine) {
+                this.mpState.status = "error";
+                this.mpState.error = "No selected payment line.";
+                return;
+            }
 
             const result = await this.mpOrm.call(
-                "pos.payment.method", 
-                "create_mp_payment", 
-                [], 
+                "pos.payment.method",
+                "create_mp_payment",
+                [],
                 {
                     amount: amount,
                     description: order.name,
                     pos_client_ref: order.name,
-                    payment_method_id: selectedLine.payment_method.id
+                    payment_method_id: selectedLine.payment_method.id,
                 }
             );
 
-            if (result.status !== "success") {
+            if (!result || result.status !== "success") {
+                const msg =
+                    (result && result.details) || "Error creating MercadoPago payment.";
                 this.mpState.status = "error";
-                this.mpState.error = result.details;
-                this.mpNotification.add(result.details, { type: "danger" });
+                this.mpState.error = msg;
+                this.mpNotification.add(msg, { type: "danger" });
                 return;
             }
 
@@ -78,34 +106,49 @@ patch(PaymentScreen.prototype, {
             this.mpState.payment_id = result.payment_id;
 
             this.pollStatus();
-
         } catch (err) {
             console.error("MercadoPago error:", err);
             this.mpState.status = "error";
-            this.mpState.error = "Unexpected error";
+            this.mpState.error = "Unexpected error in MercadoPago.";
+            this.mpNotification.add(this.mpState.error, { type: "danger" });
         }
     },
 
     async pollStatus() {
-        if (!this.mpState.payment_id) return;
+        if (!this.mpState.payment_id) {
+            return;
+        }
 
         try {
             const result = await this.mpOrm.call(
-                "pos.payment.method", 
-                "check_mp_status", 
-                [], 
+                "pos.payment.method",
+                "check_mp_status",
+                [],
                 { payment_id: this.mpState.payment_id }
             );
 
+            if (!result || !result.payment_status) {
+                this.mpState.status = "error";
+                this.mpState.error = "Unknown MercadoPago status.";
+                return;
+            }
+
             if (result.payment_status === "approved") {
                 this.mpState.status = "approved";
-                this.mpNotification.add("Payment approved", { type: "success" });
-                
-                const order = this.pos.get_order();
-                const lines = order.paymentLines || order.payment_lines || [];
-                const line = lines.find(l => l.selected);
-                if (line) {
-                    line.set_payment_status('done');
+                this.mpNotification.add("MercadoPago payment approved", {
+                    type: "success",
+                });
+
+                const order = this.currentOrder;
+                if (order) {
+                    const lines =
+                        order.paymentLines ||
+                        order.payment_lines ||
+                        [];
+                    const line = lines.find((l) => l.selected);
+                    if (line && line.set_payment_status) {
+                        line.set_payment_status("done");
+                    }
                 }
                 return;
             }
@@ -118,6 +161,8 @@ patch(PaymentScreen.prototype, {
             }
         } catch (e) {
             console.error("Polling error", e);
+            this.mpState.status = "error";
+            this.mpState.error = "Error checking MercadoPago status.";
         }
     },
 });
