@@ -9,16 +9,18 @@ console.log("MercadoPago POS Module Loaded OK");
 
 patch(PaymentScreen.prototype, {
     setup() {
-        // 1. Define ORM and Notification for our logic
+        // 1. CRITICAL: Call the original setup to initialize 'this.pos', 'this.ui', etc.
+        // We use optional chaining (?.) to prevent crashing if it's missing (though it shouldn't be).
+        this._super?.(...arguments);
+
+        // 2. Define our custom services with unique names
         this.mpOrm = useService("orm");
         this.mpNotification = useService("notification");
         
-        // 2. CRITICAL FIX: Define 'ui' so the original template can read 'this.ui.isSmall'
-        this.ui = useService("ui");
+        // We do NOT need to define 'this.ui' or 'this.pos' anymore 
+        // because _super() handles that for us.
 
-        // 3. CRITICAL FIX: Use a unique name for POS service to avoid breaking original 'this.pos' loops
-        this.mpPos = useService("pos");
-
+        // 3. Our custom state
         this.mpState = useState({
             status: "idle",
             qr_url: null,
@@ -28,8 +30,8 @@ patch(PaymentScreen.prototype, {
     },
 
     get isMercadoPago() {
-        // Use our safe 'mpPos' accessor
-        const order = this.mpPos.get_order();
+        // Use the standard 'this.pos' which is now available via _super()
+        const order = this.pos.get_order();
         if (!order) return false;
 
         const lines = order.paymentLines || order.payment_lines || [];
@@ -43,7 +45,7 @@ patch(PaymentScreen.prototype, {
 
         try {
             this.mpState.status = "loading";
-            const order = this.mpPos.get_order();
+            const order = this.pos.get_order();
             const amount = order.get_due();
             
             const lines = order.paymentLines || order.payment_lines || [];
@@ -98,7 +100,7 @@ patch(PaymentScreen.prototype, {
                 this.mpState.status = "approved";
                 this.mpNotification.add("Payment approved", { type: "success" });
                 
-                const order = this.mpPos.get_order();
+                const order = this.pos.get_order();
                 const lines = order.paymentLines || order.payment_lines || [];
                 const line = lines.find(l => l.selected);
                 if (line) {
