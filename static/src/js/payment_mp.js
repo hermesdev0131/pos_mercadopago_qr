@@ -7,10 +7,13 @@ import { useState } from "@odoo/owl";
 import MPOverlay from "@pos_mercadopago_qr/js/mp_overlay";
 
 console.log("MercadoPago POS Module Loaded (Odoo 18)");
+console.log("About to patch PaymentScreen");
 
-patch(PaymentScreen.prototype, {
-    setup() {
-        super.setup(...arguments);
+try {
+    patch(PaymentScreen.prototype, {
+        setup() {
+            console.log("=== SETUP CALLED ===");
+            super.setup(...arguments);
 
         this.orm = useService("orm");
         this.notification = useService("notification");
@@ -168,4 +171,7 @@ patch(PaymentScreen.prototype, {
         }
     },
 
-});
+    });
+} catch (e) {
+    console.error("ERROR patching PaymentScreen:", e);
+}
