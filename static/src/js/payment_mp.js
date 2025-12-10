@@ -2,7 +2,8 @@
 
 import { PaymentScreen } from "@point_of_sale/app/screens/payment_screen/payment_screen";
 import { patch } from "@web/core/utils/patch";
-import { useState, useService } from "@odoo/owl";
+import { useState } from "@odoo/owl";
+import { useService } from "@web/core/utils/hooks";
 import { MPQRPopup } from "@pos_mercadopago_qr/js/mp_qr_popup";
 
 console.log("MercadoPago POS Module Loaded (Odoo 18)");
