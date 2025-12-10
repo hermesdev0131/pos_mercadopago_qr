@@ -21,7 +21,7 @@
             'pos_mercadopago_qr/static/src/js/mp_qr_popup.js',
             'pos_mercadopago_qr/static/src/xml/mp_qr_popup.xml',
             'pos_mercadopago_qr/static/src/js/payment_mp.js',
-            'pos_mercadopago_qr/static/src/js/payment_mp.xml',
+            'pos_mercadopago_qr/static/src/xml/payment_mp.xml',
         ],
     },
     'installable': True,
