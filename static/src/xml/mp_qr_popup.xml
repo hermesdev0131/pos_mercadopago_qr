@@ -1,50 +1,99 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<templates id="template" xml:space="preserve">
+<templates id="mp_qr_templates" xml_declaration="False">
 
-    <t t-name="pos_mercadopago_qr.MPQRPopup">
-        <Dialog title="props.title">
-            <div class="mp-popup-content d-flex flex-column align-items-center gap-3 p-3 text-center">
-                
-                <t t-if="props.status === 'idle'">
-                    <p class="text-muted">Click below to generate the QR Code</p>
-                    <button class="btn btn-primary btn-lg w-100" t-on-click="props.onStart">
-                        Generate QR ($ <t t-esc="props.amount"/>)
+    <!-- Full-screen popup component -->
+    <t t-name="pos_mercadopago_qr.MPQRPopup" owl="1">
+        <div class="mpqr-backdrop"
+             style="position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:99999;
+                    display:flex; align-items:center; justify-content:center;">
+            <div class="mpqr-card bg-white p-4 rounded-4 shadow text-center" style="min-width:320px;">
+                <h3 class="mb-3" style="color:#0099ff;">Mercado Pago</h3>
+
+                <!-- idle -->
+                <t t-if="props.status == 'idle'">
+                    <p class="mb-3">Click on "Generate QR" to start the payment.</p>
+                    <button class="btn btn-primary w-100"
+                            t-on-click="props.onStart">
+                        Generate QR
                     </button>
                 </t>
 
-                <t t-if="props.status === 'loading'">
-                    <i class="fa fa-spinner fa-spin fa-3x text-primary"/>
-                    <p>Connecting to Mercado Pago...</p>
-                </t>
-
-                <t t-if="props.status === 'pending'">
-                    <div class="border p-2 rounded">
-                        <img t-att-src="props.qr_url" style="width: 250px; height: 250px; object-fit: contain;"/>
-                    </div>
-                    <div class="text-muted mt-2">
-                        <i class="fa fa-circle-o-notch fa-spin"/> Waiting for payment...
+                <!-- loading -->
+                <t t-if="props.status == 'loading'">
+                    <div class="py-4">
+                        <i class="fa fa-spinner fa-spin fa-3x mb-3"/>
+                        <p>Connecting to Mercado Pago...</p>
                     </div>
                 </t>
 
-                <t t-if="props.status === 'approved'">
-                    <i class="fa fa-check-circle fa-5x text-success"/>
-                    <h3 class="text-success mt-2">Payment Approved!</h3>
-                    <button class="btn btn-secondary w-100 mt-3" t-on-click="props.onClose">Close</button>
+                <!-- pending -->
+                <t t-if="props.status == 'pending'">
+                    <div class="py-3">
+                        <img t-att-src="props.qr_url"
+                             style="width:220px; height:220px; object-fit:contain;
+                                    border:1px solid #ddd; border-radius:8px;"
+                        />
+                        <p class="mt-3">
+                            Scan the QR code with the Mercado Pago app.
+                        </p>
+                        <p class="fw-bold mb-0">
+                            Amount:
+                            <t t-esc="props.amount"/>
+                        </p>
+                    </div>
                 </t>
 
-                <t t-if="props.status === 'error'">
-                    <i class="fa fa-exclamation-triangle fa-3x text-danger"/>
-                    <p class="text-danger fw-bold mt-2"><t t-esc="props.error"/></p>
-                    <button class="btn btn-secondary w-100" t-on-click="props.onRetry">Retry</button>
+                <!-- approved -->
+                <t t-if="props.status == 'approved'">
+                    <div class="py-4 text-success">
+                        <i class="fa fa-check-circle fa-4x mb-3"/>
+                        <h4 class="mb-2">Payment approved</h4>
+                        <button class="btn btn-success w-100"
+                                t-on-click="props.onClose">
+                            Close
+                        </button>
+                    </div>
                 </t>
 
-                <t t-if="props.status !== 'approved'">
-                    <button class="btn btn-link text-muted mt-2" t-on-click="props.onClose">
-                        Cancel / Close
-                    </button>
+                <!-- error -->
+                <t t-if="props.status == 'error'">
+                    <div class="py-3 text-danger">
+                        <i class="fa fa-exclamation-triangle fa-3x mb-3"/>
+                        <p class="mb-3">
+                            <t t-esc="props.error or 'Error while processing the payment.'"/>
+                        </p>
+                        <div class="d-grid gap-2">
+                            <button class="btn btn-secondary"
+                                    t-on-click="props.onRetry">
+                                Try again
+                            </button>
+                            <button class="btn btn-outline-secondary"
+                                    t-on-click="props.onClose">
+                                Close
+                            </button>
+                        </div>
+                    </div>
                 </t>
             </div>
-        </Dialog>
+        </div>
+    </t>
+
+    <!-- Inject popup inside PaymentScreen -->
+    <t t-name="pos_mercadopago_qr.PaymentScreenPatch"
+       t-inherit="point_of_sale.PaymentScreen"
+       t-inherit-mode="extension">
+
+        <!-- Ensure payment-screen has a layout that can host the popup -->
+        <xpath expr="//div[contains(@class, 'main-content')]" position="attributes">
+            <attribute name="style">position:relative;</attribute>
+        </xpath>
+
+        <!-- Add the popup at the end of the screen -->
+        <xpath expr="//div[contains(@class, 'main-content')]" position="after">
+            <t t-if="mpqrPopupProps">
+                <MPQRPopup t-props="mpqrPopupProps"/>
+            </t>
+        </xpath>
     </t>
 
 </templates>
