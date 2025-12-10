@@ -89,11 +89,9 @@
         </xpath>
 
         <!-- Add the popup at the end of the screen -->
-        <xpath expr="//div[contains(@class, 'payment-screen')]" position="inside">
-            <t t-if="mpqrPopupProps">
-                <MPQRPopup t-props="mpqrPopupProps"/>
-            </t>
-        </xpath>
+        <t t-if="mpqrPopupProps">
+            <MPQRPopup t-props="mpqrPopupProps"/>
+        </t>
     </t>
 
 </templates>
