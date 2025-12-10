@@ -82,12 +82,17 @@ patch(PaymentScreen.prototype, {
     },
 
     async clickPaymentMethod(paymentMethod) {
+        console.log("clickPaymentMethod called with:", paymentMethod);
         await super.clickPaymentMethod(...arguments);
 
-        console.log(paymentMethod?.name);
+        console.log("Payment method name:", paymentMethod?.name);
+        console.log("Full payment method object:", JSON.stringify(paymentMethod, null, 2));
 
         if (paymentMethod?.name === "MercadoPago") {
+            console.log("MercadoPago detected! Showing popup...");
             this.showMPQRPopup();
+        } else {
+            console.log("Payment method is not MercadoPago");
         }
     },
 
