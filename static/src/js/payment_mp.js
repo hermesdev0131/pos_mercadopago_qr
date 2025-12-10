@@ -1,15 +1,14 @@
 /** @odoo-module **/
 
 import { PaymentScreen } from "@point_of_sale/app/screens/payment_screen/payment_screen";
-import { PaymentScreenPaymentLines } from "@point_of_sale/app/screens/payment_screen/payment_lines/payment_lines";
 import { patch } from "@web/core/utils/patch";
-import { useState, onWillUpdateProps } from "@odoo/owl";
 import { useService } from "@web/core/utils/hooks";
+import { useState } from "@odoo/owl";
 import { MPQRPopup } from "@pos_mercadopago_qr/js/mp_qr_popup";
 
-console.log("MercadoPago POS Module Loaded (Odoo 18)");
+console.log("MercadoPago POS Module Loaded (Odoo 18) - FIX ADD NEW");
 
-/* Register popup component with screen */
+/* 1. Register popup component */
 patch(PaymentScreen, {
     components: {
         ...PaymentScreen.components,
@@ -17,13 +16,17 @@ patch(PaymentScreen, {
     },
 });
 
+/* 2. Patch PaymentScreen Logic */
 patch(PaymentScreen.prototype, {
     setup() {
-        super.setup();
+        // 1. Initialize original services/state
+        this._super?.(...arguments);
 
-        this.orm = useService("orm");
-        this.notification = useService("notification");
-
+        // 2. Define custom services
+        this.mpOrm = useService("orm");
+        this.mpNotification = useService("notification");
+        
+        // 3. Define State
         this.mpqrState = useState({
             visible: false,
             status: "idle",
@@ -31,68 +34,54 @@ patch(PaymentScreen.prototype, {
             payment_id: null,
             amount: 0,
             error: null,
-            lastSelectedMethod: null,
         });
-
-        onWillUpdateProps(() => {
-            this._checkMercadoPagoSelected();
-        });
-
-        console.log("--Setup Success!---");
-        console.log("Available methods on PaymentScreen:", Object.getOwnPropertyNames(PaymentScreen.prototype));
     },
 
-    // async selectPaymentLine(paymentLine) {
-    //     // 1. Call the original Odoo logic (highlights the button, sets state)
-    //     await super.selectPaymentLine(...arguments);
+    // --- CRITICAL FIX 1: Hook into ADDING a new payment (Clicking the button) ---
+    async addNewPaymentLine(paymentMethod) {
+        // Call original to actually add the line
+        const result = await this._super(...arguments);
         
-    //     // 2. Run our check immediately after selection
-    //     this._checkMercadoPagoSelected();
-    // },
-
-    _checkMercadoPagoSelected() {
-        const line = this._mpqrLine();
-        
-        if (!line) {
-            this.hideMPQRPopup();
-            return;
+        // Check immediately
+        if (paymentMethod.name === "MercadoPago") {
+            console.log("MercadoPago Added! Triggering Popup...");
+            this.showMPQRPopup();
         }
+        return result;
+    },
 
-        const methodName = line.payment_method.name;
-
-        // If Mercado Pago is selected
-        if (methodName === "MercadoPago") {
-            // Only show if not already paid/finished
-            if (line.payment_status !== 'done' && line.payment_status !== 'waitingCard') {
-                console.log("MercadoPago selected! Opening popup...");
+    // --- CRITICAL FIX 2: Hook into SELECTING an existing line ---
+    selectPaymentLine(paymentLine) {
+        this._super(...arguments);
+        
+        if (paymentLine.payment_method.name === "MercadoPago") {
+            console.log("MercadoPago Selected! Triggering Popup...");
+            // Only show if not paid
+            if (paymentLine.payment_status !== 'done' && paymentLine.payment_status !== 'waitingCard') {
                 this.showMPQRPopup();
             }
         } else {
-            // User switched to Cash/Bank/etc
             this.hideMPQRPopup();
         }
     },
 
-    // helper
-    _mpqrLine() {
-        const order = this.currentOrder;
-        return order?.paymentLines?.find(l => l.selected) || null;
-    },
+    // --- Helpers ---
 
-    get isMercadoPagoSelected() {
-        const line = this._mpqrLine();
-        return line?.payment_method?.name === "MercadoPago";
+    get isMercadoPago() {
+        // Use standard 'this.pos' (loaded by _super)
+        const order = this.pos.get_order();
+        if (!order) return false;
+        const line = order.selected_paymentline;
+        return line && line.payment_method.name === "MercadoPago";
     },
 
     showMPQRPopup() {
-        const order = this.currentOrder;
-        // Don't reset if we are already showing the same payment
+        const order = this.pos.get_order();
         if (this.mpqrState.visible && this.mpqrState.payment_id) return;
 
         this.mpqrState.visible = true;
         
-        // Only reset status if we don't have an active payment for this line
-        // (You could improve this by storing payment_id on the line itself)
+        // Reset only if fresh start
         if (this.mpqrState.status !== 'pending') {
             this.mpqrState.status = "idle";
             this.mpqrState.error = null;
@@ -105,9 +94,7 @@ patch(PaymentScreen.prototype, {
     },
 
     get mpqrPopupProps() {
-        if (!this.mpqrState.visible) {
-            return null;
-        }
+        if (!this.mpqrState.visible) return null;
 
         return {
             status: this.mpqrState.status,
@@ -123,24 +110,21 @@ patch(PaymentScreen.prototype, {
         };
     },
 
+    // --- API Logic ---
 
-
-    /* BACKEND CALL */
     async startMercadoPago() {
-        if (!this.isMercadoPagoSelected) {
-            this.notification.add("Select Mercado Pago payment method first", {
-                type: "warning",
-            });
+        const order = this.pos.get_order();
+        const line = order.selected_paymentline;
+
+        if (!line || line.payment_method.name !== "MercadoPago") {
+            this.mpNotification.add("Select Mercado Pago first", { type: "warning" });
             return;
         }
-
-        const order = this.currentOrder;
-        const line = this._mpqrLine();
 
         this.mpqrState.status = "loading";
 
         try {
-            const res = await this.orm.call(
+            const res = await this.mpOrm.call(
                 "pos.payment.method",
                 "create_mp_payment",
                 [],
@@ -174,7 +158,7 @@ patch(PaymentScreen.prototype, {
         if (!this.mpqrState.payment_id || !this.mpqrState.visible) return;
 
         try {
-            const res = await this.orm.call(
+            const res = await this.mpOrm.call(
                 "pos.payment.method",
                 "check_mp_status",
                 [],
@@ -184,11 +168,9 @@ patch(PaymentScreen.prototype, {
             if (res.payment_status === "approved") {
                 this.mpqrState.status = "approved";
                 
-                // Mark line as paid in Odoo
-                const line = this._mpqrLine();
-                if (line) {
-                    line.set_payment_status('done');
-                }
+                const order = this.pos.get_order();
+                const line = order.selected_paymentline;
+                if (line) line.set_payment_status('done');
                 return;
             }
 
@@ -200,31 +182,7 @@ patch(PaymentScreen.prototype, {
             this.mpqrState.status = "error";
             this.mpqrState.error = "Payment " + res.payment_status;
         } catch (e) {
-            // network error or close? stop polling or retry silently
             console.error("Polling error", e);
         }
     },
-});
-
-patch(PaymentScreenPaymentLines.prototype, {
-    async selectLine(paymentLine) {
-        // Call original to ensure the line is selected in data
-        await super.selectLine(paymentLine);
-                
-        console.log("Payment Line Clicked:", paymentLine.payment_method.name);
-        
-        if (paymentLine.payment_method.name === "MercadoPago") {
-
-             const screen = this.env.pos.get_order().pos.numpadMode === 'quantity' ? this : null; 
-             
-        }
-    }
-});
-
-patch(PaymentScreen.prototype, {
-    async selectPaymentLine(paymentLine) {
-        console.log("PaymentScreen selectPaymentLine triggered for:", paymentLine.name);
-        await super.selectPaymentLine(...arguments);
-        this._checkMercadoPagoSelected();
-    }
 });
