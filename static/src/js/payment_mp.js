@@ -2,7 +2,7 @@
 
 import { PaymentScreen } from "@point_of_sale/app/screens/payment_screen/payment_screen";
 import { patch } from "@web/core/utils/patch";
-import { useState, onMounted } from "@odoo/owl";
+import { useState, onWillUpdateProps } from "@odoo/owl";
 import { useService } from "@web/core/utils/hooks";
 import { MPQRPopup } from "@pos_mercadopago_qr/js/mp_qr_popup";
 
@@ -33,30 +33,43 @@ patch(PaymentScreen.prototype, {
             lastSelectedMethod: null,
         });
 
-        onMounted(() => {
-            this._startWatchingPaymentSelection();
+        onWillUpdateProps(() => {
+            this._checkMercadoPagoSelected();
         });
 
         console.log("--Setup Success!---");
+        console.log("Available methods on PaymentScreen:", Object.getOwnPropertyNames(PaymentScreen.prototype));
     },
 
-    _startWatchingPaymentSelection() {
-        const checkInterval = setInterval(() => {
-            const line = this._mpqrLine();
-            const methodName = line?.payment_method?.name;
-            
-            if (methodName && methodName !== this.mpqrState.lastSelectedMethod) {
-                console.log("Payment method changed to:", methodName);
-                this.mpqrState.lastSelectedMethod = methodName;
-                
-                if (methodName === "MercadoPago") {
-                    console.log("MercadoPago detected! Showing popup...");
-                    this.showMPQRPopup();
-                }
-            }
-        }, 100);
+    async selectPaymentLine(paymentLine) {
+        // 1. Call the original Odoo logic (highlights the button, sets state)
+        await super.selectPaymentLine(...arguments);
+        
+        // 2. Run our check immediately after selection
+        this._checkMercadoPagoSelected();
+    },
 
-        return () => clearInterval(checkInterval);
+    _checkMercadoPagoSelected() {
+        const line = this._mpqrLine();
+        
+        if (!line) {
+            this.hideMPQRPopup();
+            return;
+        }
+
+        const methodName = line.payment_method.name;
+
+        // If Mercado Pago is selected
+        if (methodName === "MercadoPago") {
+            // Only show if not already paid/finished
+            if (line.payment_status !== 'done' && line.payment_status !== 'waitingCard') {
+                console.log("MercadoPago selected! Opening popup...");
+                this.showMPQRPopup();
+            }
+        } else {
+            // User switched to Cash/Bank/etc
+            this.hideMPQRPopup();
+        }
     },
 
     // helper
@@ -72,11 +85,18 @@ patch(PaymentScreen.prototype, {
 
     showMPQRPopup() {
         const order = this.currentOrder;
+        // Don't reset if we are already showing the same payment
+        if (this.mpqrState.visible && this.mpqrState.payment_id) return;
 
         this.mpqrState.visible = true;
-        this.mpqrState.status = "idle";
-        this.mpqrState.error = null;
-        this.mpqrState.amount = order?.get_due() ?? 0;
+        
+        // Only reset status if we don't have an active payment for this line
+        // (You could improve this by storing payment_id on the line itself)
+        if (this.mpqrState.status !== 'pending') {
+            this.mpqrState.status = "idle";
+            this.mpqrState.error = null;
+            this.mpqrState.amount = order?.get_due() ?? 0;
+        }
     },
 
     hideMPQRPopup() {
@@ -150,7 +170,7 @@ patch(PaymentScreen.prototype, {
     },
 
     async _pollStatus() {
-        if (!this.mpqrState.payment_id) return;
+        if (!this.mpqrState.payment_id || !this.mpqrState.visible) return;
 
         try {
             const res = await this.orm.call(
@@ -162,8 +182,12 @@ patch(PaymentScreen.prototype, {
 
             if (res.payment_status === "approved") {
                 this.mpqrState.status = "approved";
+                
+                // Mark line as paid in Odoo
                 const line = this._mpqrLine();
-                line?.set_payment_status?.("done");
+                if (line) {
+                    line.set_payment_status('done');
+                }
                 return;
             }
 
@@ -174,9 +198,9 @@ patch(PaymentScreen.prototype, {
 
             this.mpqrState.status = "error";
             this.mpqrState.error = "Payment " + res.payment_status;
-        } catch {
-            this.mpqrState.status = "error";
-            this.mpqrState.error = "Polling error";
+        } catch (e) {
+            // network error or close? stop polling or retry silently
+            console.error("Polling error", e);
         }
     },
 });
