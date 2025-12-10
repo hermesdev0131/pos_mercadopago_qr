@@ -33,8 +33,8 @@ patch(PaymentScreen.prototype, {
             amount: 0,
             error: null,
         });
-        console.log(pos.payment_method);
-        this.showMPQRPopup();
+        console.log("Payment methods:", pos.payment_methods);
+        console.log(PaymentScreen.prototype.clickPaymentMethod);
         console.log("--Setup Success!---");
     },
 
