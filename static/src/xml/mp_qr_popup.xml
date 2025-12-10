@@ -84,12 +84,12 @@
        t-inherit-mode="extension">
 
         <!-- Ensure payment-screen has a layout that can host the popup -->
-        <xpath expr="//div[contains(@class, 'payment-screen')]" position="attributes">
+        <xpath expr="//div[contains(@class, 'main-content')]" position="attributes">
             <attribute name="style">position:relative;</attribute>
         </xpath>
 
         <!-- Add the popup at the end of the screen -->
-        <xpath expr="//div[contains(@class, 'payment-screen')]" position="inside">
+        <xpath expr="//div[contains(@class, 'main-content')]" position="after">
             <t t-if="mpqrPopupProps">
                 <MPQRPopup t-props="mpqrPopupProps"/>
             </t>

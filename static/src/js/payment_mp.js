@@ -31,6 +31,8 @@ patch(PaymentScreen.prototype, {
             amount: 0,
             error: null,
         });
+
+        console.log("--Setup Success!---");
     },
 
     // helper
@@ -78,7 +80,7 @@ patch(PaymentScreen.prototype, {
 
     async clickPaymentMethod(paymentMethod) {
         await super.clickPaymentMethod(...arguments);
-
+        console.log(paymentMethod?.name);
         if (paymentMethod?.name === "MercadoPago") {
             this.showMPQRPopup();
         }
