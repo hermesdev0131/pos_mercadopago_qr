@@ -1,0 +1,8 @@
+    <!-- Example: CustomButton.xml -->
+    <templates xml:space="preserve">
+        <t t-name="CustomButton" owl="1">
+            <button class="control-button" t-on-click="onClick">
+                <span>My Custom Button</span>
+            </button>
+        </t>
+    </templates>
