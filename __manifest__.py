@@ -12,17 +12,17 @@
         'views/pos_payment_method_view.xml',
     ],
     'assets': {
-        'point_of_sale._assets_pos': [
-            'pos_mercadopago_qr/static/src/js/custombutton.js',
-            'pos_mercadopago_qr/static/src/xml/custombutton.xml',
-            'pos_mercadopago_qr/static/src/js/integration.js',
-        ],
-        # "point_of_sale._assets_pos": [
-        #     'pos_mercadopago_qr/static/src/js/mp_qr_popup.js',
-        #     'pos_mercadopago_qr/static/src/xml/mp_qr_popup.xml',
-        #     'pos_mercadopago_qr/static/src/js/payment_mp.js',
-        #     'pos_mercadopago_qr/static/src/js/payment_mp.xml',
+        # 'point_of_sale._assets_pos': [
+        #     'pos_mercadopago_qr/static/src/js/custombutton.js',
+        #     'pos_mercadopago_qr/static/src/xml/custombutton.xml',
+        #     'pos_mercadopago_qr/static/src/js/integration.js',
         # ],
+        "point_of_sale._assets_pos": [
+            'pos_mercadopago_qr/static/src/js/mp_qr_popup.js',
+            'pos_mercadopago_qr/static/src/xml/mp_qr_popup.xml',
+            'pos_mercadopago_qr/static/src/js/payment_mp.js',
+            'pos_mercadopago_qr/static/src/js/payment_mp.xml',
+        ],
     },
     'installable': True,
     'application': False,
