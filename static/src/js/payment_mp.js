@@ -2,9 +2,8 @@
 
 import { PaymentScreen } from "@point_of_sale/app/screens/payment_screen/payment_screen";
 import { patch } from "@web/core/utils/patch";
-import { useState } from "@odoo/owl";
+import { useState, onMounted } from "@odoo/owl";
 import { useService } from "@web/core/utils/hooks";
-import { onWillUpdateProps } from "@odoo/owl";
 import { MPQRPopup } from "@pos_mercadopago_qr/js/mp_qr_popup";
 
 console.log("MercadoPago POS Module Loaded (Odoo 18)");
@@ -34,27 +33,30 @@ patch(PaymentScreen.prototype, {
             lastSelectedMethod: null,
         });
 
-        onWillUpdateProps(() => {
-            this._checkMercadoPagoSelected();
+        onMounted(() => {
+            this._startWatchingPaymentSelection();
         });
 
         console.log("--Setup Success!---");
-        console.log("Available methods on PaymentScreen:", Object.getOwnPropertyNames(PaymentScreen.prototype));
     },
 
-    _checkMercadoPagoSelected() {
-        const line = this._mpqrLine();
-        const methodName = line?.payment_method?.name;
-        
-        if (methodName && methodName !== this.mpqrState.lastSelectedMethod) {
-            console.log("Payment method changed to:", methodName);
-            this.mpqrState.lastSelectedMethod = methodName;
+    _startWatchingPaymentSelection() {
+        const checkInterval = setInterval(() => {
+            const line = this._mpqrLine();
+            const methodName = line?.payment_method?.name;
             
-            if (methodName === "MercadoPago") {
-                console.log("MercadoPago detected! Showing popup...");
-                this.showMPQRPopup();
+            if (methodName && methodName !== this.mpqrState.lastSelectedMethod) {
+                console.log("Payment method changed to:", methodName);
+                this.mpqrState.lastSelectedMethod = methodName;
+                
+                if (methodName === "MercadoPago") {
+                    console.log("MercadoPago detected! Showing popup...");
+                    this.showMPQRPopup();
+                }
             }
-        }
+        }, 100);
+
+        return () => clearInterval(checkInterval);
     },
 
     // helper
