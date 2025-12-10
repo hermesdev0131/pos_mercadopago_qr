@@ -22,6 +22,8 @@ patch(PaymentScreen.prototype, {
 
         this.orm = useService("orm");
         this.notification = useService("notification");
+        const pos = useService("pos");
+        
 
         this.mpqrState = useState({
             visible: false,
@@ -31,7 +33,8 @@ patch(PaymentScreen.prototype, {
             amount: 0,
             error: null,
         });
-
+        console.log(pos.payment_method);
+        this.showMPQRPopup();
         console.log("--Setup Success!---");
     },
 
@@ -80,7 +83,9 @@ patch(PaymentScreen.prototype, {
 
     async clickPaymentMethod(paymentMethod) {
         await super.clickPaymentMethod(...arguments);
+
         console.log(paymentMethod?.name);
+
         if (paymentMethod?.name === "MercadoPago") {
             this.showMPQRPopup();
         }
