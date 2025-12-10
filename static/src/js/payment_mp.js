@@ -1,6 +1,7 @@
 /** @odoo-module **/
 
 import { PaymentScreen } from "@point_of_sale/app/screens/payment_screen/payment_screen";
+import { PaymentScreenPaymentLines } from "@point_of_sale/app/screens/payment_screen/payment_lines/payment_lines";
 import { patch } from "@web/core/utils/patch";
 import { useState, onWillUpdateProps } from "@odoo/owl";
 import { useService } from "@web/core/utils/hooks";
@@ -41,13 +42,13 @@ patch(PaymentScreen.prototype, {
         console.log("Available methods on PaymentScreen:", Object.getOwnPropertyNames(PaymentScreen.prototype));
     },
 
-    async selectPaymentLine(paymentLine) {
-        // 1. Call the original Odoo logic (highlights the button, sets state)
-        await super.selectPaymentLine(...arguments);
+    // async selectPaymentLine(paymentLine) {
+    //     // 1. Call the original Odoo logic (highlights the button, sets state)
+    //     await super.selectPaymentLine(...arguments);
         
-        // 2. Run our check immediately after selection
-        this._checkMercadoPagoSelected();
-    },
+    //     // 2. Run our check immediately after selection
+    //     this._checkMercadoPagoSelected();
+    // },
 
     _checkMercadoPagoSelected() {
         const line = this._mpqrLine();
@@ -203,4 +204,27 @@ patch(PaymentScreen.prototype, {
             console.error("Polling error", e);
         }
     },
+});
+
+patch(PaymentScreenPaymentLines.prototype, {
+    async selectLine(paymentLine) {
+        // Call original to ensure the line is selected in data
+        await super.selectLine(paymentLine);
+                
+        console.log("Payment Line Clicked:", paymentLine.payment_method.name);
+        
+        if (paymentLine.payment_method.name === "MercadoPago") {
+
+             const screen = this.env.pos.get_order().pos.numpadMode === 'quantity' ? this : null; 
+             
+        }
+    }
+});
+
+patch(PaymentScreen.prototype, {
+    async selectPaymentLine(paymentLine) {
+        console.log("PaymentScreen selectPaymentLine triggered for:", paymentLine.name);
+        await super.selectPaymentLine(...arguments);
+        this._checkMercadoPagoSelected();
+    }
 });
