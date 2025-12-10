@@ -4,6 +4,7 @@ import { PaymentScreen } from "@point_of_sale/app/screens/payment_screen/payment
 import { patch } from "@web/core/utils/patch";
 import { useState } from "@odoo/owl";
 import { useService } from "@web/core/utils/hooks";
+import { onWillUpdateProps } from "@odoo/owl";
 import { MPQRPopup } from "@pos_mercadopago_qr/js/mp_qr_popup";
 
 console.log("MercadoPago POS Module Loaded (Odoo 18)");
@@ -22,8 +23,6 @@ patch(PaymentScreen.prototype, {
 
         this.orm = useService("orm");
         this.notification = useService("notification");
-        const pos = useService("pos");
-        
 
         this.mpqrState = useState({
             visible: false,
@@ -32,10 +31,30 @@ patch(PaymentScreen.prototype, {
             payment_id: null,
             amount: 0,
             error: null,
+            lastSelectedMethod: null,
         });
-        console.log("Payment methods:", pos.payment_methods);
-        console.log(PaymentScreen.prototype.clickPaymentMethod);
+
+        onWillUpdateProps(() => {
+            this._checkMercadoPagoSelected();
+        });
+
         console.log("--Setup Success!---");
+        console.log("Available methods on PaymentScreen:", Object.getOwnPropertyNames(PaymentScreen.prototype));
+    },
+
+    _checkMercadoPagoSelected() {
+        const line = this._mpqrLine();
+        const methodName = line?.payment_method?.name;
+        
+        if (methodName && methodName !== this.mpqrState.lastSelectedMethod) {
+            console.log("Payment method changed to:", methodName);
+            this.mpqrState.lastSelectedMethod = methodName;
+            
+            if (methodName === "MercadoPago") {
+                console.log("MercadoPago detected! Showing popup...");
+                this.showMPQRPopup();
+            }
+        }
     },
 
     // helper
@@ -81,20 +100,7 @@ patch(PaymentScreen.prototype, {
         };
     },
 
-    async clickPaymentMethod(paymentMethod) {
-        console.log("clickPaymentMethod called with:", paymentMethod);
-        await super.clickPaymentMethod(...arguments);
 
-        console.log("Payment method name:", paymentMethod?.name);
-        console.log("Full payment method object:", JSON.stringify(paymentMethod, null, 2));
-
-        if (paymentMethod?.name === "MercadoPago") {
-            console.log("MercadoPago detected! Showing popup...");
-            this.showMPQRPopup();
-        } else {
-            console.log("Payment method is not MercadoPago");
-        }
-    },
 
     /* BACKEND CALL */
     async startMercadoPago() {
