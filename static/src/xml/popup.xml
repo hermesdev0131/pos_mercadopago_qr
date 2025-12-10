@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates id="template" xml:space="preserve">
+    <t t-name="pos_custom_popup.InfoPopup">
+        <Dialog title.translate="Additional Information">
+            <div class="mb-3">
+                <label for="pe_refund_reason" class="form-label">Welcome:</label>
+            </div>
+            <div class="modal-body custom-form-view">
+               <form>
+                   <div class="col d-flex justify-content-between align-items-center p-3">
+                        <label class="form-label label" for="customer">Customer</label>
+                        <input t-model="state.customer" class="w-75 form-control" name="customer"/>
+                    </div>
+                   <div class="col d-flex justify-content-between align-items-center p-3">
+                        <label class="form-label label" for="customer">Notes</label>
+                        <input t-model="state.notes" type="text" class="w-75 form-control" name="notes"/>
+                    </div>
+                </form>
+            </div>
+            <t t-set-slot="footer">
+                <button class="btn btn-primary o-default-button" t-on-click="confirm">Ok</button>
+            </t>
+        </Dialog>
+    </t>
+</templates>
