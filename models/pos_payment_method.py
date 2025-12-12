@@ -79,3 +79,15 @@ class PosPaymentMethod(models.Model):
         if tx:
             return {"payment_status": tx.status}
         return {"payment_status": "not_found"}
+
+    @api.model
+    def cancel_mp_payment(self, payment_id):
+        """
+        Cancel a pending MercadoPago payment.
+        """
+        tx = self.env['mp.transaction'].sudo().search([('mp_payment_id', '=', payment_id)], limit=1)
+        if tx and tx.status == 'pending':
+            tx.write({'status': 'cancelled'})
+            _logger.info("[MP] Payment %s cancelled", payment_id)
+            return {"status": "cancelled"}
+        return {"status": "not_found"}

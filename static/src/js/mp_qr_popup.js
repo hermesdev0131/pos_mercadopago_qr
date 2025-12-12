@@ -3,21 +3,50 @@
 import { Component } from "@odoo/owl";
 import { registry } from "@web/core/registry";
 
-// Simple OWL component, all logic is driven by props
-console.log ("QR Popup loaded!");
+/**
+ * MercadoPago QR Popup Component
+ * 
+ * A full-screen modal popup for displaying MercadoPago QR codes
+ * and handling payment status in Odoo 18 POS.
+ * 
+ * States:
+ * - idle: Initial state, shows "Generate QR" button
+ * - loading: Connecting to MercadoPago API
+ * - pending: QR code displayed, waiting for payment
+ * - approved: Payment successful
+ * - error: Payment failed or error occurred
+ */
 export class MPQRPopup extends Component {
     static template = "pos_mercadopago_qr.MPQRPopup";
+    
     static props = {
+        // Current status of the payment flow
         status: { type: String },
-        qr_url: { type: String, optional: true },
+        
+        // QR code image URL (base64 or URL)
+        qr_url: { type: [String, { value: null }], optional: true },
+        
+        // Payment amount to display
         amount: { type: [String, Number], optional: true },
-        error: { type: String, optional: true },
+        
+        // Error message when status is 'error'
+        error: { type: [String, { value: null }], optional: true },
+        
+        // Callback to start the payment process
         onStart: { type: Function },
+        
+        // Callback to close the popup
         onClose: { type: Function },
+        
+        // Callback to retry after an error
         onRetry: { type: Function },
+        
+        // Callback to cancel pending payment
+        onCancel: { type: Function },
     };
 }
 
+// Register component in POS components registry
 registry.category("pos_components").add("MPQRPopup", MPQRPopup);
 
 export default MPQRPopup;

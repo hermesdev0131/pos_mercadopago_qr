@@ -1,0 +1,376 @@
+/* MercadoPago QR Popup - Modern POS Style */
+
+/* Backdrop overlay */
+.mpqr-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.85);
+    z-index: 99999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(4px);
+    animation: mpqr-fade-in 0.2s ease-out;
+}
+
+@keyframes mpqr-fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes mpqr-slide-up {
+    from { 
+        opacity: 0;
+        transform: translateY(20px) scale(0.98);
+    }
+    to { 
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+@keyframes mpqr-pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.02); }
+}
+
+@keyframes mpqr-spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+/* Main popup card */
+.mpqr-card {
+    background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+    border-radius: 20px;
+    box-shadow: 
+        0 25px 50px -12px rgba(0, 0, 0, 0.5),
+        0 0 0 1px rgba(255, 255, 255, 0.1);
+    min-width: 420px;
+    max-width: 500px;
+    overflow: hidden;
+    animation: mpqr-slide-up 0.3s ease-out;
+}
+
+/* Header section with MercadoPago branding */
+.mpqr-header {
+    background: linear-gradient(135deg, #009ee3 0%, #00b1ea 100%);
+    padding: 24px 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+}
+
+.mpqr-logo {
+    width: 48px;
+    height: 48px;
+    background: white;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.mpqr-logo-icon {
+    font-size: 28px;
+    color: #009ee3;
+}
+
+.mpqr-title {
+    color: white;
+    font-size: 26px;
+    font-weight: 700;
+    margin: 0;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    letter-spacing: -0.5px;
+}
+
+/* Content area */
+.mpqr-content {
+    padding: 32px;
+    text-align: center;
+}
+
+/* QR Code container */
+.mpqr-qr-container {
+    background: white;
+    border: 3px solid #e2e8f0;
+    border-radius: 16px;
+    padding: 16px;
+    display: inline-block;
+    margin-bottom: 24px;
+    box-shadow: 
+        0 4px 6px -1px rgba(0, 0, 0, 0.1),
+        inset 0 2px 4px rgba(0, 0, 0, 0.02);
+    animation: mpqr-pulse 2s ease-in-out infinite;
+}
+
+.mpqr-qr-image {
+    width: 240px;
+    height: 240px;
+    object-fit: contain;
+    display: block;
+}
+
+/* Status messages */
+.mpqr-status {
+    font-size: 18px;
+    color: #64748b;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+}
+
+.mpqr-status-pending {
+    color: #0284c7;
+    font-weight: 500;
+}
+
+.mpqr-status-icon {
+    font-size: 20px;
+    animation: mpqr-spin 1.5s linear infinite;
+}
+
+/* Amount display */
+.mpqr-amount-container {
+    background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+    border: 2px solid #bae6fd;
+    border-radius: 12px;
+    padding: 16px 24px;
+    margin-bottom: 24px;
+}
+
+.mpqr-amount-label {
+    font-size: 14px;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 4px;
+}
+
+.mpqr-amount-value {
+    font-size: 36px;
+    font-weight: 800;
+    color: #0369a1;
+    letter-spacing: -1px;
+}
+
+/* Buttons */
+.mpqr-btn {
+    width: 100%;
+    padding: 16px 32px;
+    border-radius: 12px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+}
+
+.mpqr-btn-primary {
+    background: linear-gradient(135deg, #009ee3 0%, #00b1ea 100%);
+    color: white;
+    box-shadow: 0 4px 14px rgba(0, 158, 227, 0.4);
+}
+
+.mpqr-btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(0, 158, 227, 0.5);
+}
+
+.mpqr-btn-primary:active {
+    transform: translateY(0);
+}
+
+.mpqr-btn-cancel {
+    background: #f1f5f9;
+    color: #64748b;
+    margin-top: 12px;
+}
+
+.mpqr-btn-cancel:hover {
+    background: #e2e8f0;
+    color: #475569;
+}
+
+.mpqr-btn-success {
+    background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+    color: white;
+    box-shadow: 0 4px 14px rgba(34, 197, 94, 0.4);
+}
+
+.mpqr-btn-danger {
+    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+    color: white;
+}
+
+/* Loading state */
+.mpqr-loading {
+    padding: 48px 32px;
+}
+
+.mpqr-spinner {
+    width: 64px;
+    height: 64px;
+    border: 4px solid #e2e8f0;
+    border-top-color: #009ee3;
+    border-radius: 50%;
+    animation: mpqr-spin 1s linear infinite;
+    margin: 0 auto 24px;
+}
+
+.mpqr-loading-text {
+    font-size: 18px;
+    color: #64748b;
+}
+
+/* Success state */
+.mpqr-success {
+    padding: 48px 32px;
+}
+
+.mpqr-success-icon {
+    width: 80px;
+    height: 80px;
+    background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 24px;
+    box-shadow: 0 8px 24px rgba(34, 197, 94, 0.4);
+    animation: mpqr-pulse 1s ease-in-out;
+}
+
+.mpqr-success-icon i {
+    font-size: 40px;
+    color: white;
+}
+
+.mpqr-success-title {
+    font-size: 24px;
+    font-weight: 700;
+    color: #16a34a;
+    margin-bottom: 8px;
+}
+
+.mpqr-success-subtitle {
+    font-size: 16px;
+    color: #64748b;
+    margin-bottom: 24px;
+}
+
+/* Error state */
+.mpqr-error {
+    padding: 32px;
+}
+
+.mpqr-error-icon {
+    width: 80px;
+    height: 80px;
+    background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
+    border: 3px solid #fecaca;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 24px;
+}
+
+.mpqr-error-icon i {
+    font-size: 40px;
+    color: #dc2626;
+}
+
+.mpqr-error-title {
+    font-size: 20px;
+    font-weight: 700;
+    color: #dc2626;
+    margin-bottom: 8px;
+}
+
+.mpqr-error-message {
+    font-size: 15px;
+    color: #64748b;
+    margin-bottom: 24px;
+    padding: 12px 16px;
+    background: #fef2f2;
+    border-radius: 8px;
+    border: 1px solid #fecaca;
+}
+
+/* Idle state */
+.mpqr-idle {
+    padding: 48px 32px;
+}
+
+.mpqr-idle-icon {
+    width: 100px;
+    height: 100px;
+    background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+    border: 3px solid #bae6fd;
+    border-radius: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 24px;
+}
+
+.mpqr-idle-icon i {
+    font-size: 48px;
+    color: #0284c7;
+}
+
+.mpqr-idle-text {
+    font-size: 16px;
+    color: #64748b;
+    margin-bottom: 24px;
+    line-height: 1.5;
+}
+
+/* Footer with branding */
+.mpqr-footer {
+    padding: 16px 32px;
+    background: #f8fafc;
+    border-top: 1px solid #e2e8f0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.mpqr-footer-text {
+    font-size: 12px;
+    color: #94a3b8;
+}
+
+.mpqr-footer-icon {
+    color: #009ee3;
+}
+
+/* Responsive adjustments */
+@media (max-width: 480px) {
+    .mpqr-card {
+        min-width: 320px;
+        max-width: 95vw;
+        margin: 16px;
+    }
+    
+    .mpqr-qr-image {
+        width: 200px;
+        height: 200px;
+    }
+    
+    .mpqr-amount-value {
+        font-size: 28px;
+    }
+}
+

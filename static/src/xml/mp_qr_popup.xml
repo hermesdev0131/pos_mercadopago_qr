@@ -1,79 +1,142 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<templates id="mp_qr_templates" xml_declaration="False">
+<templates id="mp_qr_templates" xml:space="preserve">
 
-    <!-- Full-screen popup component -->
+    <!-- Full-screen MercadoPago QR Popup Component -->
     <t t-name="pos_mercadopago_qr.MPQRPopup" owl="1">
-        <div class="mpqr-backdrop"
-             style="position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:99999;
-                    display:flex; align-items:center; justify-content:center;">
-            <div class="mpqr-card bg-white p-4 rounded-4 shadow text-center" style="min-width:320px;">
-                <h3 class="mb-3" style="color:#0099ff;">Mercado Pago</h3>
-
-                <!-- idle -->
-                <t t-if="props.status == 'idle'">
-                    <p class="mb-3">Click on "Generate QR" to start the payment.</p>
-                    <button class="btn btn-primary w-100"
-                            t-on-click="props.onStart">
-                        Generate QR
-                    </button>
-                </t>
-
-                <!-- loading -->
-                <t t-if="props.status == 'loading'">
-                    <div class="py-4">
-                        <i class="fa fa-spinner fa-spin fa-3x mb-3"/>
-                        <p>Connecting to Mercado Pago...</p>
+        <div class="mpqr-backdrop" t-on-click.stop="">
+            <div class="mpqr-card" t-on-click.stop="">
+                
+                <!-- Header with MercadoPago branding -->
+                <div class="mpqr-header">
+                    <div class="mpqr-logo">
+                        <i class="fa fa-credit-card mpqr-logo-icon"/>
                     </div>
-                </t>
+                    <h2 class="mpqr-title">Mercado Pago</h2>
+                </div>
 
-                <!-- pending -->
-                <t t-if="props.status == 'pending'">
-                    <div class="py-3">
-                        <img t-att-src="props.qr_url"
-                             style="width:220px; height:220px; object-fit:contain;
-                                    border:1px solid #ddd; border-radius:8px;"
-                        />
-                        <p class="mt-3">
-                            Scan the QR code with the Mercado Pago app.
+                <!-- IDLE STATE: Show generate QR button -->
+                <t t-if="props.status === 'idle'">
+                    <div class="mpqr-content mpqr-idle">
+                        <div class="mpqr-idle-icon">
+                            <i class="fa fa-qrcode"/>
+                        </div>
+                        <p class="mpqr-idle-text">
+                            Presione el botón para generar el código QR<br/>
+                            y procesar el pago con Mercado Pago
                         </p>
-                        <p class="fw-bold mb-0">
-                            Amount:
-                            <t t-esc="props.amount"/>
-                        </p>
-                    </div>
-                </t>
-
-                <!-- approved -->
-                <t t-if="props.status == 'approved'">
-                    <div class="py-4 text-success">
-                        <i class="fa fa-check-circle fa-4x mb-3"/>
-                        <h4 class="mb-2">Payment approved</h4>
-                        <button class="btn btn-success w-100"
-                                t-on-click="props.onClose">
-                            Close
+                        
+                        <!-- Amount preview -->
+                        <div class="mpqr-amount-container">
+                            <div class="mpqr-amount-label">Monto a cobrar</div>
+                            <div class="mpqr-amount-value">
+                                $ <t t-esc="props.amount"/>
+                            </div>
+                        </div>
+                        
+                        <button class="mpqr-btn mpqr-btn-primary" t-on-click="props.onStart">
+                            <i class="fa fa-qrcode"/>
+                            Generar QR
+                        </button>
+                        <button class="mpqr-btn mpqr-btn-cancel" t-on-click="props.onClose">
+                            <i class="fa fa-times"/>
+                            Cancelar
                         </button>
                     </div>
                 </t>
 
-                <!-- error -->
-                <t t-if="props.status == 'error'">
-                    <div class="py-3 text-danger">
-                        <i class="fa fa-exclamation-triangle fa-3x mb-3"/>
-                        <p class="mb-3">
-                            <t t-esc="props.error or 'Error while processing the payment.'"/>
-                        </p>
-                        <div class="d-grid gap-2">
-                            <button class="btn btn-secondary"
-                                    t-on-click="props.onRetry">
-                                Try again
-                            </button>
-                            <button class="btn btn-outline-secondary"
-                                    t-on-click="props.onClose">
-                                Close
-                            </button>
-                        </div>
+                <!-- LOADING STATE: Connecting to MercadoPago -->
+                <t t-if="props.status === 'loading'">
+                    <div class="mpqr-content mpqr-loading">
+                        <div class="mpqr-spinner"/>
+                        <p class="mpqr-loading-text">Conectando con Mercado Pago...</p>
                     </div>
                 </t>
+
+                <!-- PENDING STATE: Show QR code and wait for payment -->
+                <t t-if="props.status === 'pending'">
+                    <div class="mpqr-content">
+                        <!-- QR Code -->
+                        <div class="mpqr-qr-container">
+                            <img t-att-src="props.qr_url" 
+                                 class="mpqr-qr-image"
+                                 alt="QR Code"/>
+                        </div>
+                        
+                        <!-- Status message -->
+                        <div class="mpqr-status mpqr-status-pending">
+                            <i class="fa fa-refresh mpqr-status-icon"/>
+                            Esperando pago...
+                        </div>
+                        
+                        <!-- Amount -->
+                        <div class="mpqr-amount-container">
+                            <div class="mpqr-amount-label">Monto a cobrar</div>
+                            <div class="mpqr-amount-value">
+                                $ <t t-esc="props.amount"/>
+                            </div>
+                        </div>
+                        
+                        <button class="mpqr-btn mpqr-btn-cancel" t-on-click="props.onCancel">
+                            <i class="fa fa-times"/>
+                            Cancelar Pago
+                        </button>
+                    </div>
+                </t>
+
+                <!-- APPROVED STATE: Payment successful -->
+                <t t-if="props.status === 'approved'">
+                    <div class="mpqr-content mpqr-success">
+                        <div class="mpqr-success-icon">
+                            <i class="fa fa-check"/>
+                        </div>
+                        <h3 class="mpqr-success-title">¡Pago Aprobado!</h3>
+                        <p class="mpqr-success-subtitle">
+                            El pago se ha procesado correctamente
+                        </p>
+                        
+                        <!-- Amount paid -->
+                        <div class="mpqr-amount-container">
+                            <div class="mpqr-amount-label">Monto cobrado</div>
+                            <div class="mpqr-amount-value">
+                                $ <t t-esc="props.amount"/>
+                            </div>
+                        </div>
+                        
+                        <button class="mpqr-btn mpqr-btn-success" t-on-click="props.onClose">
+                            <i class="fa fa-check"/>
+                            Cerrar
+                        </button>
+                    </div>
+                </t>
+
+                <!-- ERROR STATE: Show error with retry option -->
+                <t t-if="props.status === 'error'">
+                    <div class="mpqr-content mpqr-error">
+                        <div class="mpqr-error-icon">
+                            <i class="fa fa-exclamation-triangle"/>
+                        </div>
+                        <h3 class="mpqr-error-title">Error en el Pago</h3>
+                        <p class="mpqr-error-message">
+                            <t t-esc="props.error or 'Ha ocurrido un error al procesar el pago.'"/>
+                        </p>
+                        
+                        <button class="mpqr-btn mpqr-btn-primary" t-on-click="props.onRetry">
+                            <i class="fa fa-refresh"/>
+                            Intentar de Nuevo
+                        </button>
+                        <button class="mpqr-btn mpqr-btn-cancel" t-on-click="props.onClose">
+                            <i class="fa fa-times"/>
+                            Cerrar
+                        </button>
+                    </div>
+                </t>
+
+                <!-- Footer -->
+                <div class="mpqr-footer">
+                    <i class="fa fa-lock mpqr-footer-icon"/>
+                    <span class="mpqr-footer-text">Pago seguro con Mercado Pago</span>
+                </div>
+
             </div>
         </div>
     </t>
@@ -83,13 +146,8 @@
        t-inherit="point_of_sale.PaymentScreen"
        t-inherit-mode="extension">
 
-        <!-- Ensure payment-screen has a layout that can host the popup -->
-        <xpath expr="//div[contains(@class, 'main-content')]" position="attributes">
-            <attribute name="style">position:relative;</attribute>
-        </xpath>
-
         <!-- Add the popup at the end of the screen -->
-        <xpath expr="//div[contains(@class, 'main-content')]" position="after">
+        <xpath expr="//div[hasclass('payment-screen')]" position="inside">
             <t t-if="mpqrPopupProps">
                 <MPQRPopup t-props="mpqrPopupProps"/>
             </t>
