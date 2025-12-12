@@ -30,7 +30,6 @@ patch(PaymentScreen.prototype, {
             status: "idle",      // idle | loading | pending | approved | error
             qr_url: null,
             payment_id: null,
-            amount: 0,
             error: null,
             pollActive: false,   // Flag to control polling
         });
@@ -122,7 +121,6 @@ patch(PaymentScreen.prototype, {
     // =====================================================
     
     showMPQRPopup() {
-        const order = this.currentOrder;
         this.mpState.visible = true;
         
         // Reset state only if not already pending
@@ -130,8 +128,21 @@ patch(PaymentScreen.prototype, {
             this.mpState.status = "idle";
             this.mpState.error = null;
             this.mpState.qr_url = null;
-            this.mpState.amount = order ? order.get_due() : 0;
+            // Amount will be fetched dynamically from selectedPaymentLine
         }
+    },
+    
+    /**
+     * Get the current MP payment amount from the selected payment line
+     */
+    _getMPAmount() {
+        const line = this.selectedPaymentLine;
+        if (line && line.payment_method_id && line.payment_method_id.name === "MercadoPago") {
+            return line.amount || 0;
+        }
+        // Fallback to order due amount
+        const order = this.currentOrder;
+        return order ? order.get_due() : 0;
     },
 
     hideMPQRPopup() {
@@ -148,7 +159,7 @@ patch(PaymentScreen.prototype, {
         
         return {
             status: this.mpState.status,
-            amount: this.mpState.amount,
+            amount: this._getMPAmount(),  // Always get fresh amount from payment line
             qr_url: this.mpState.qr_url,
             error: this.mpState.error,
             onStart: this.startMercadoPago.bind(this),
@@ -226,6 +237,15 @@ patch(PaymentScreen.prototype, {
             return;
         }
 
+        // Get amount from payment line
+        const amount = this._getMPAmount();
+        
+        if (!amount || amount <= 0) {
+            this.mpState.status = "error";
+            this.mpState.error = "El monto debe ser mayor a 0";
+            return;
+        }
+
         this.mpState.status = "loading";
         this.mpState.error = null;
 
@@ -235,7 +255,7 @@ patch(PaymentScreen.prototype, {
                 "create_mp_payment",
                 [],
                 {
-                    amount: this.mpState.amount,
+                    amount: amount,
                     description: order.name,
                     pos_client_ref: order.name,
                     payment_method_id: line.payment_method_id.id,
