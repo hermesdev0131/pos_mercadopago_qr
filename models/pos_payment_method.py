@@ -47,9 +47,9 @@ class PosPaymentMethod(models.Model):
         qr_content = f"mercadopago://pay?amount={amount}&ref={pos_client_ref}"
         qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=300x300&data={qr_content}"
         
-        # Log test transaction
+        # Log test transaction - commit immediately so polling can find it
         try:
-            self.env['mp.transaction'].sudo().create({
+            tx = self.env['mp.transaction'].sudo().create({
                 "external_reference": pos_client_ref,
                 "mp_payment_id": payment_id,
                 "qr_data": qr_url,
@@ -61,10 +61,12 @@ class PosPaymentMethod(models.Model):
                 }),
                 "amount": amount,
             })
+            # Force commit so the polling can find the record
+            self.env.cr.commit()
+            _logger.info("[MP TEST] Created test payment: %s (tx.id=%s)", payment_id, tx.id)
         except Exception as e:
-            _logger.warning("[MP TEST] Could not create transaction record: %s", e)
-        
-        _logger.info("[MP TEST] Created test payment: %s", payment_id)
+            _logger.error("[MP TEST] Could not create transaction record: %s", e)
+            return {"status": "error", "details": f"Could not create transaction: {e}"}
         
         return {
             "status": "success",
@@ -135,10 +137,22 @@ class PosPaymentMethod(models.Model):
     def check_mp_status(self, payment_id):
         """
         Check status of a payment.
+        In test mode, if not found, returns 'pending' to keep polling.
         """
+        _logger.info("[MP] Checking status for payment_id: %s", payment_id)
         tx = self.env['mp.transaction'].sudo().search([('mp_payment_id', '=', payment_id)], limit=1)
+        
         if tx:
+            _logger.info("[MP] Found transaction - status: %s", tx.status)
             return {"payment_status": tx.status}
+        
+        # In test mode, if transaction not found yet, assume pending
+        # This handles race condition where polling starts before commit
+        if MP_TEST_MODE and payment_id and payment_id.startswith("TEST-"):
+            _logger.warning("[MP TEST] Transaction not found, returning pending for: %s", payment_id)
+            return {"payment_status": "pending"}
+        
+        _logger.warning("[MP] Transaction not found: %s", payment_id)
         return {"payment_status": "not_found"}
 
     @api.model

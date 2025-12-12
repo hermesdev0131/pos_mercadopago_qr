@@ -300,6 +300,8 @@ patch(PaymentScreen.prototype, {
                 { payment_id: this.mpState.payment_id }
             );
 
+            console.log("[MP] Poll status:", res.payment_status);
+
             // Payment approved
             if (res.payment_status === "approved") {
                 this.mpState.status = "approved";
@@ -326,16 +328,17 @@ patch(PaymentScreen.prototype, {
                 return;
             }
 
-            // Payment still pending - continue polling
-            if (res.payment_status === "pending" && this.mpState.pollActive) {
+            // Payment still pending OR not found yet - continue polling
+            if ((res.payment_status === "pending" || res.payment_status === "not_found") && this.mpState.pollActive) {
                 setTimeout(() => this._pollPaymentStatus(), 3000);
                 return;
             }
 
-            // Unknown status
-            this.mpState.status = "error";
-            this.mpState.error = `Estado desconocido: ${res.payment_status}`;
-            this.mpState.pollActive = false;
+            // Unknown status - but don't error out immediately, keep trying
+            console.warn("[MP] Unknown status, will retry:", res.payment_status);
+            if (this.mpState.pollActive) {
+                setTimeout(() => this._pollPaymentStatus(), 3000);
+            }
 
         } catch (e) {
             console.error("Polling error:", e);
