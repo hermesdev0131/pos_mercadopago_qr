@@ -3,14 +3,27 @@ import requests
 import logging
 import json
 import uuid
+import threading
+import time
 
 _logger = logging.getLogger(__name__)
 
 # ============================================================
-# TEST MODE: Set to True to use fake QR codes for testing
-# Set to False when ready to use real MercadoPago API
+# TEST MODE CONFIGURATION
 # ============================================================
-MP_TEST_MODE = True
+MP_TEST_MODE = True           # Set to False for real MercadoPago API
+MP_AUTO_APPROVE_SECONDS = 10  # Auto-approve test payments after X seconds (0 to disable)
+
+# In-memory storage for test payments (no database needed)
+_test_payments = {}
+
+
+def _auto_approve_payment(payment_id, delay):
+    """Background thread to auto-approve a test payment after delay."""
+    time.sleep(delay)
+    if payment_id in _test_payments and _test_payments[payment_id]["status"] == "pending":
+        _test_payments[payment_id]["status"] = "approved"
+        _logger.info("[MP TEST] Payment %s AUTO-APPROVED after %s seconds", payment_id, delay)
 
 
 class PosPaymentMethod(models.Model):
@@ -25,7 +38,7 @@ class PosPaymentMethod(models.Model):
         _logger.info("[MP] Creating payment - Amount: %s, Ref: %s", amount, pos_client_ref)
         
         # ============================================================
-        # TEST MODE: Return fake QR for testing UI
+        # TEST MODE: Return fake QR for testing UI (no database)
         # ============================================================
         if MP_TEST_MODE:
             return self._create_test_payment(amount, description, pos_client_ref)
@@ -38,35 +51,38 @@ class PosPaymentMethod(models.Model):
     def _create_test_payment(self, amount, description, pos_client_ref):
         """
         Creates a fake payment for testing purposes.
-        Returns a generated QR code image.
+        Uses in-memory storage - no database required.
         """
+        global _test_payments
+        
         # Generate unique payment ID
         payment_id = f"TEST-{uuid.uuid4().hex[:12].upper()}"
         
-        # Generate QR code using free API (encodes the payment info)
-        qr_content = f"mercadopago://pay?amount={amount}&ref={pos_client_ref}"
+        # Generate QR code using free API
+        qr_content = f"mercadopago://pay?amount={amount}&ref={pos_client_ref}&id={payment_id}"
         qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=300x300&data={qr_content}"
         
-        # Log test transaction - commit immediately so polling can find it
-        try:
-            tx = self.env['mp.transaction'].sudo().create({
-                "external_reference": pos_client_ref,
-                "mp_payment_id": payment_id,
-                "qr_data": qr_url,
-                "status": "pending",
-                "raw_data": json.dumps({
-                    "test_mode": True,
-                    "amount": amount,
-                    "description": description,
-                }),
-                "amount": amount,
-            })
-            # Force commit so the polling can find the record
-            self.env.cr.commit()
-            _logger.info("[MP TEST] Created test payment: %s (tx.id=%s)", payment_id, tx.id)
-        except Exception as e:
-            _logger.error("[MP TEST] Could not create transaction record: %s", e)
-            return {"status": "error", "details": f"Could not create transaction: {e}"}
+        # Store in memory (no database)
+        _test_payments[payment_id] = {
+            "payment_id": payment_id,
+            "amount": amount,
+            "description": description,
+            "external_reference": pos_client_ref,
+            "qr_url": qr_url,
+            "status": "pending",
+        }
+        
+        # Auto-approve after delay (for testing)
+        if MP_AUTO_APPROVE_SECONDS > 0:
+            thread = threading.Thread(
+                target=_auto_approve_payment,
+                args=(payment_id, MP_AUTO_APPROVE_SECONDS)
+            )
+            thread.daemon = True
+            thread.start()
+            _logger.info("[MP TEST] Payment will auto-approve in %s seconds", MP_AUTO_APPROVE_SECONDS)
+        
+        _logger.info("[MP TEST] Created test payment: %s (in-memory)", payment_id)
         
         return {
             "status": "success",
@@ -113,15 +129,18 @@ class PosPaymentMethod(models.Model):
 
             data = response.json()
             
-            # 5. Log Transaction
-            self.env['mp.transaction'].sudo().create({
-                "external_reference": external_reference,
-                "mp_payment_id": data.get("id"),
-                "qr_data": data.get("qr_data"),
-                "status": "pending",
-                "raw_data": json.dumps(data),
-                "amount": amount,
-            })
+            # 5. Log Transaction in database
+            try:
+                self.env['mp.transaction'].sudo().create({
+                    "external_reference": external_reference,
+                    "mp_payment_id": data.get("id"),
+                    "qr_data": data.get("qr_data"),
+                    "status": "pending",
+                    "raw_data": json.dumps(data),
+                    "amount": amount,
+                })
+            except Exception as e:
+                _logger.warning("[MP] Could not log transaction: %s", e)
 
             return {
                 "status": "success",
@@ -137,22 +156,24 @@ class PosPaymentMethod(models.Model):
     def check_mp_status(self, payment_id):
         """
         Check status of a payment.
-        In test mode, if not found, returns 'pending' to keep polling.
         """
-        _logger.info("[MP] Checking status for payment_id: %s", payment_id)
-        tx = self.env['mp.transaction'].sudo().search([('mp_payment_id', '=', payment_id)], limit=1)
+        global _test_payments
         
+        # TEST MODE: Check in-memory storage
+        if MP_TEST_MODE and payment_id in _test_payments:
+            status = _test_payments[payment_id]["status"]
+            _logger.info("[MP TEST] Status for %s: %s", payment_id, status)
+            return {"payment_status": status}
+        
+        # PRODUCTION: Check database
+        tx = self.env['mp.transaction'].sudo().search([('mp_payment_id', '=', payment_id)], limit=1)
         if tx:
-            _logger.info("[MP] Found transaction - status: %s", tx.status)
             return {"payment_status": tx.status}
         
-        # In test mode, if transaction not found yet, assume pending
-        # This handles race condition where polling starts before commit
+        # In test mode, if not found, assume pending
         if MP_TEST_MODE and payment_id and payment_id.startswith("TEST-"):
-            _logger.warning("[MP TEST] Transaction not found, returning pending for: %s", payment_id)
             return {"payment_status": "pending"}
         
-        _logger.warning("[MP] Transaction not found: %s", payment_id)
         return {"payment_status": "not_found"}
 
     @api.model
@@ -160,25 +181,49 @@ class PosPaymentMethod(models.Model):
         """
         Cancel a pending MercadoPago payment.
         """
+        global _test_payments
+        
+        # TEST MODE: Update in-memory
+        if MP_TEST_MODE and payment_id in _test_payments:
+            _test_payments[payment_id]["status"] = "cancelled"
+            _logger.info("[MP TEST] Payment %s cancelled", payment_id)
+            return {"status": "cancelled"}
+        
+        # PRODUCTION: Update database
         tx = self.env['mp.transaction'].sudo().search([('mp_payment_id', '=', payment_id)], limit=1)
         if tx and tx.status == 'pending':
             tx.write({'status': 'cancelled'})
             _logger.info("[MP] Payment %s cancelled", payment_id)
             return {"status": "cancelled"}
+        
         return {"status": "not_found"}
 
     @api.model
     def simulate_mp_approval(self, payment_id):
         """
         TEST ONLY: Simulate payment approval for testing.
-        Call this method to approve a pending test payment.
+        Call this from browser console or Odoo shell.
         """
+        global _test_payments
+        
         if not MP_TEST_MODE:
             return {"status": "error", "details": "Not in test mode"}
         
-        tx = self.env['mp.transaction'].sudo().search([('mp_payment_id', '=', payment_id)], limit=1)
-        if tx and tx.status == 'pending':
-            tx.write({'status': 'approved'})
-            _logger.info("[MP TEST] Payment %s approved (simulated)", payment_id)
-            return {"status": "approved"}
-        return {"status": "not_found"}
+        if payment_id in _test_payments:
+            _test_payments[payment_id]["status"] = "approved"
+            _logger.info("[MP TEST] Payment %s APPROVED (simulated)", payment_id)
+            return {"status": "approved", "payment_id": payment_id}
+        
+        return {"status": "not_found", "payment_id": payment_id}
+
+    @api.model
+    def list_test_payments(self):
+        """
+        TEST ONLY: List all pending test payments.
+        Useful for debugging.
+        """
+        global _test_payments
+        return {
+            "test_mode": MP_TEST_MODE,
+            "payments": list(_test_payments.values())
+        }
