@@ -41,8 +41,11 @@ export class MPQRPopup extends Component {
         // Callback to retry after an error
         onRetry: { type: Function },
         
-        // Callback to cancel pending payment
+        // Callback to cancel pending payment (deletes payment line)
         onCancel: { type: Function },
+        
+        // Callback to start a new order after success
+        onNewOrder: { type: Function },
     };
 }
 

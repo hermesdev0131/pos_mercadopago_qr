@@ -37,7 +37,7 @@
                             <i class="fa fa-qrcode"/>
                             Generar QR
                         </button>
-                        <button class="mpqr-btn mpqr-btn-cancel" t-on-click="props.onClose">
+                        <button class="mpqr-btn mpqr-btn-cancel" t-on-click="props.onCancel">
                             <i class="fa fa-times"/>
                             Cancelar
                         </button>
@@ -102,7 +102,11 @@
                             </div>
                         </div>
                         
-                        <button class="mpqr-btn mpqr-btn-success" t-on-click="props.onClose">
+                        <button class="mpqr-btn mpqr-btn-success" t-on-click="props.onNewOrder">
+                            <i class="fa fa-plus"/>
+                            Nueva Orden
+                        </button>
+                        <button class="mpqr-btn mpqr-btn-cancel" t-on-click="props.onClose">
                             <i class="fa fa-check"/>
                             Cerrar
                         </button>
@@ -124,9 +128,9 @@
                             <i class="fa fa-refresh"/>
                             Intentar de Nuevo
                         </button>
-                        <button class="mpqr-btn mpqr-btn-cancel" t-on-click="props.onClose">
+                        <button class="mpqr-btn mpqr-btn-cancel" t-on-click="props.onCancel">
                             <i class="fa fa-times"/>
-                            Cerrar
+                            Cancelar
                         </button>
                     </div>
                 </t>

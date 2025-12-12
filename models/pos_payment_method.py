@@ -5,6 +5,7 @@ import json
 import uuid
 import threading
 import time
+import urllib.parse
 
 _logger = logging.getLogger(__name__)
 
@@ -58,9 +59,10 @@ class PosPaymentMethod(models.Model):
         # Generate unique payment ID
         payment_id = f"TEST-{uuid.uuid4().hex[:12].upper()}"
         
-        # Generate QR code using free API
-        qr_content = f"mercadopago://pay?amount={amount}&ref={pos_client_ref}&id={payment_id}"
-        qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=300x300&data={qr_content}"
+        # Generate QR code using free API (URL-encode the data)
+        qr_content = f"mp://pay/{payment_id}/{amount}"
+        qr_data_encoded = urllib.parse.quote(qr_content, safe='')
+        qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=300x300&data={qr_data_encoded}"
         
         # Store in memory (no database)
         _test_payments[payment_id] = {

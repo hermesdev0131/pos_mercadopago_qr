@@ -166,6 +166,7 @@ patch(PaymentScreen.prototype, {
             onRetry: this._handleMPRetry.bind(this),
             onClose: this._handleMPClose.bind(this),
             onCancel: this._handleMPCancel.bind(this),
+            onNewOrder: this._handleMPNewOrder.bind(this),
         };
     },
 
@@ -180,19 +181,17 @@ patch(PaymentScreen.prototype, {
     },
 
     _handleMPClose() {
-        // If payment was approved, we can close safely
-        if (this.mpState.status === "approved") {
-            this.hideMPQRPopup();
-            return;
-        }
-        
-        // For other states, just hide
+        // Just close the popup
         this.hideMPQRPopup();
     },
 
     async _handleMPCancel() {
         // Stop polling
         this.mpState.pollActive = false;
+        
+        // Get the current MP payment line before cancelling
+        const line = this.selectedPaymentLine;
+        const lineUuid = line ? line.uuid : null;
         
         // If there's an active payment, try to cancel it on the backend
         if (this.mpState.payment_id) {
@@ -208,16 +207,39 @@ patch(PaymentScreen.prototype, {
             }
         }
         
-        // Reset state
+        // Reset state and hide popup
         this.mpState.status = "idle";
         this.mpState.payment_id = null;
         this.mpState.qr_url = null;
         this.mpState.error = null;
+        this.hideMPQRPopup();
+        
+        // Delete the MercadoPago payment line
+        if (lineUuid) {
+            try {
+                await super.deletePaymentLine(lineUuid);
+                console.log("[MP] Payment line deleted after cancel");
+            } catch (e) {
+                console.warn("Could not delete payment line:", e);
+            }
+        }
         
         this.mpNotification.add(
             "Pago cancelado",
             { type: "info" }
         );
+    },
+
+    async _handleMPNewOrder() {
+        // Hide the popup
+        this.hideMPQRPopup();
+        
+        // Validate the current order (complete the sale)
+        try {
+            await this.validateOrder(false);
+        } catch (e) {
+            console.error("Error validating order:", e);
+        }
     },
 
     // =====================================================
