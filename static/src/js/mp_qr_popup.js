@@ -9,10 +9,11 @@ import { registry } from "@web/core/registry";
  * A full-screen modal popup for displaying MercadoPago QR codes
  * and handling payment status in Odoo 18 POS.
  * 
+ * QR is auto-generated when popup opens - no manual button needed.
+ * 
  * States:
- * - idle: Initial state, shows "Generate QR" button
- * - loading: Connecting to MercadoPago API
- * - pending: QR code displayed, waiting for payment
+ * - loading: Generating QR code (initial state)
+ * - pending: QR code displayed, waiting for customer payment
  * - approved: Payment successful
  * - error: Payment failed or error occurred
  */

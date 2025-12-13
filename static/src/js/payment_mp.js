@@ -125,10 +125,12 @@ patch(PaymentScreen.prototype, {
         
         // Reset state only if not already pending
         if (this.mpState.status !== 'pending') {
-            this.mpState.status = "idle";
+            this.mpState.status = "loading";
             this.mpState.error = null;
             this.mpState.qr_url = null;
-            // Amount will be fetched dynamically from selectedPaymentLine
+            
+            // Automatically start QR generation
+            setTimeout(() => this.startMercadoPago(), 100);
         }
     },
     
@@ -175,9 +177,12 @@ patch(PaymentScreen.prototype, {
     // =====================================================
     
     _handleMPRetry() {
-        this.mpState.status = "idle";
+        this.mpState.status = "loading";
         this.mpState.error = null;
         this.mpState.qr_url = null;
+        
+        // Automatically retry QR generation
+        setTimeout(() => this.startMercadoPago(), 100);
     },
 
     _handleMPClose() {

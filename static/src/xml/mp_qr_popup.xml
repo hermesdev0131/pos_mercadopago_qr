@@ -14,41 +14,24 @@
                     <h2 class="mpqr-title">Mercado Pago</h2>
                 </div>
 
-                <!-- IDLE STATE: Show generate QR button -->
-                <t t-if="props.status === 'idle'">
-                    <div class="mpqr-content mpqr-idle">
-                        <div class="mpqr-idle-icon">
-                            <i class="fa fa-qrcode"/>
-                        </div>
-                        <p class="mpqr-idle-text">
-                            Presione el botón para generar el código QR<br/>
-                            y procesar el pago con Mercado Pago
-                        </p>
+                <!-- LOADING STATE: Connecting to MercadoPago -->
+                <t t-if="props.status === 'loading'">
+                    <div class="mpqr-content mpqr-loading">
+                        <div class="mpqr-spinner"/>
+                        <p class="mpqr-loading-text">Generando código QR...</p>
                         
                         <!-- Amount preview -->
-                        <div class="mpqr-amount-container">
+                        <div class="mpqr-amount-container" style="margin-top: 20px;">
                             <div class="mpqr-amount-label">Monto a cobrar</div>
                             <div class="mpqr-amount-value">
                                 $ <t t-esc="props.amount"/>
                             </div>
                         </div>
                         
-                        <button class="mpqr-btn mpqr-btn-primary" t-on-click="props.onStart">
-                            <i class="fa fa-qrcode"/>
-                            Generar QR
-                        </button>
-                        <button class="mpqr-btn mpqr-btn-cancel" t-on-click="props.onCancel">
+                        <button class="mpqr-btn mpqr-btn-cancel" style="margin-top: 20px;" t-on-click="props.onCancel">
                             <i class="fa fa-times"/>
                             Cancelar
                         </button>
-                    </div>
-                </t>
-
-                <!-- LOADING STATE: Connecting to MercadoPago -->
-                <t t-if="props.status === 'loading'">
-                    <div class="mpqr-content mpqr-loading">
-                        <div class="mpqr-spinner"/>
-                        <p class="mpqr-loading-text">Conectando con Mercado Pago...</p>
                     </div>
                 </t>
 
