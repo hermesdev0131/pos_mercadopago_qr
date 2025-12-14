@@ -154,46 +154,6 @@ patch(PaymentScreen.prototype, {
     },
 
     /**
-     * Update the payment line status display
-     * @param {string} status - 'waiting', 'receiving', 'approving', 'done', 'retry', 'cancelled'
-     */
-    _setMPPaymentLineStatus(status) {
-        const line = this.selectedPaymentLine;
-        if (line && line.payment_method_id && line.payment_method_id.name === "MercadoPago") {
-            // Map our custom statuses to Odoo POS statuses
-            const statusMap = {
-                'waiting': 'waitingCard',
-                'receiving': 'waitingCard', 
-                'approving': 'waitingCard',
-                'done': 'done',
-                'retry': 'retry',
-                'cancelled': 'retry',
-            };
-            const posStatus = statusMap[status] || 'waitingCard';
-            line.set_payment_status(posStatus);
-            
-            // Store custom status message for display
-            line.mp_status_message = this._getMPStatusMessage(status);
-            console.log("[MP] Payment line status:", status, "->", posStatus);
-        }
-    },
-
-    /**
-     * Get human-readable status message
-     */
-    _getMPStatusMessage(status) {
-        const messages = {
-            'waiting': 'Esperando pago...',
-            'receiving': 'Recibiendo pago...',
-            'approving': 'Aprobando pago...',
-            'done': 'Pago completado',
-            'retry': 'Reintentar pago',
-            'cancelled': 'Pago cancelado',
-        };
-        return messages[status] || status;
-    },
-
-    /**
      * Props getter for the MPQRPopup component
      */
     get mpqrPopupProps() {
@@ -237,9 +197,6 @@ patch(PaymentScreen.prototype, {
         // Get the current MP payment line before cancelling
         const line = this.selectedPaymentLine;
         const lineUuid = line ? line.uuid : null;
-        
-        // Set status to cancelling
-        this._setMPPaymentLineStatus('cancelled');
         
         // If there's an active payment, try to cancel it on the backend
         if (this.mpState.payment_id) {
@@ -304,7 +261,6 @@ patch(PaymentScreen.prototype, {
         if (!line) {
             this.mpState.status = "error";
             this.mpState.error = "No hay línea de pago seleccionada";
-            this._setMPPaymentLineStatus('retry');
             return;
         }
 
@@ -314,15 +270,11 @@ patch(PaymentScreen.prototype, {
         if (!amount || amount <= 0) {
             this.mpState.status = "error";
             this.mpState.error = "El monto debe ser mayor a 0";
-            this._setMPPaymentLineStatus('retry');
             return;
         }
 
         this.mpState.status = "loading";
         this.mpState.error = null;
-        
-        // Set payment line to waiting status
-        this._setMPPaymentLineStatus('waiting');
 
         try {
             const res = await this.mpOrm.call(
@@ -340,7 +292,6 @@ patch(PaymentScreen.prototype, {
             if (res.status !== "success") {
                 this.mpState.status = "error";
                 this.mpState.error = res.details || "Error al crear el pago";
-                this._setMPPaymentLineStatus('retry');
                 return;
             }
 
@@ -350,16 +301,12 @@ patch(PaymentScreen.prototype, {
             this.mpState.payment_id = res.payment_id;
             this.mpState.pollActive = true;
             
-            // Update status to receiving (waiting for customer to scan)
-            this._setMPPaymentLineStatus('receiving');
-            
             this._pollPaymentStatus();
 
         } catch (err) {
             console.error("MercadoPago Error:", err);
             this.mpState.status = "error";
             this.mpState.error = "Error de conexión con MercadoPago";
-            this._setMPPaymentLineStatus('retry');
         }
     },
 
@@ -384,14 +331,14 @@ patch(PaymentScreen.prototype, {
 
             // Payment approved
             if (res.payment_status === "approved") {
-                // Show approving status briefly
-                this._setMPPaymentLineStatus('approving');
-                
                 this.mpState.status = "approved";
                 this.mpState.pollActive = false;
                 
                 // Mark payment line as done
-                this._setMPPaymentLineStatus('done');
+                const line = this.selectedPaymentLine;
+                if (line) {
+                    line.set_payment_status('done');
+                }
                 
                 this.mpNotification.add(
                     "¡Pago aprobado exitosamente!",
@@ -405,21 +352,11 @@ patch(PaymentScreen.prototype, {
                 this.mpState.status = "error";
                 this.mpState.error = `Pago ${res.payment_status === "rejected" ? "rechazado" : "cancelado"}`;
                 this.mpState.pollActive = false;
-                this._setMPPaymentLineStatus('cancelled');
-                return;
-            }
-
-            // Payment in process (customer is paying)
-            if (res.payment_status === "in_process") {
-                this._setMPPaymentLineStatus('approving');
-                setTimeout(() => this._pollPaymentStatus(), 2000);
                 return;
             }
 
             // Payment still pending OR not found yet - continue polling
             if ((res.payment_status === "pending" || res.payment_status === "not_found") && this.mpState.pollActive) {
-                // Keep receiving status while waiting
-                this._setMPPaymentLineStatus('receiving');
                 setTimeout(() => this._pollPaymentStatus(), 3000);
                 return;
             }
@@ -427,7 +364,6 @@ patch(PaymentScreen.prototype, {
             // Unknown status - but don't error out immediately, keep trying
             console.warn("[MP] Unknown status, will retry:", res.payment_status);
             if (this.mpState.pollActive) {
-                this._setMPPaymentLineStatus('waiting');
                 setTimeout(() => this._pollPaymentStatus(), 3000);
             }
 
@@ -435,7 +371,6 @@ patch(PaymentScreen.prototype, {
             console.error("Polling error:", e);
             // On network error, retry after a longer delay
             if (this.mpState.pollActive) {
-                this._setMPPaymentLineStatus('waiting');
                 setTimeout(() => this._pollPaymentStatus(), 5000);
             }
         }
