@@ -12,7 +12,7 @@ _logger = logging.getLogger(__name__)
 # ============================================================
 # TEST MODE CONFIGURATION
 # ============================================================
-MP_TEST_MODE = True           # Set to False for real MercadoPago API
+MP_TEST_MODE = FALSE           # Set to False for real MercadoPago API
 MP_AUTO_APPROVE_SECONDS = 10  # Auto-approve test payments after X seconds (0 to disable)
 
 # In-memory storage for test payments (no database needed)
