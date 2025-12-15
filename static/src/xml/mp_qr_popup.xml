@@ -31,7 +31,7 @@
                         <button class="mpqr-btn mpqr-btn-cancel" style="margin-top: 20px;" t-on-click="props.onCancel">
                             <i class="fa fa-times"/>
                             Cancelar
-                        </button>
+                    </button>
                     </div>
                 </t>
 
@@ -40,7 +40,7 @@
                     <div class="mpqr-content">
                         <!-- QR Code -->
                         <div class="mpqr-qr-container">
-                            <img t-att-src="props.qr_url" 
+                        <img t-att-src="props.qr_url"
                                  class="mpqr-qr-image"
                                  alt="QR Code"/>
                         </div>
@@ -110,11 +110,11 @@
                         <button class="mpqr-btn mpqr-btn-primary" t-on-click="props.onRetry">
                             <i class="fa fa-refresh"/>
                             Intentar de Nuevo
-                        </button>
+                            </button>
                         <button class="mpqr-btn mpqr-btn-cancel" t-on-click="props.onCancel">
                             <i class="fa fa-times"/>
                             Cancelar
-                        </button>
+                            </button>
                     </div>
                 </t>
 
