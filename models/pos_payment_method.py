@@ -31,12 +31,19 @@ class PosPaymentMethod(models.Model):
     _inherit = 'pos.payment.method'
 
     @api.model
-    def create_mp_payment(self, amount, description, pos_client_ref, payment_method_id):
+    def create_mp_payment(self, amount, description, pos_client_ref, payment_method_id, customer_email=None):
         """
         Creates the preference/QR in MercadoPago.
         Called from POS via ORM service.
+        
+        Args:
+            amount: Payment amount
+            description: Payment description (order name)
+            pos_client_ref: External reference for the order
+            payment_method_id: ID of the pos.payment.method
+            customer_email: Optional customer email from POS partner
         """
-        _logger.info("[MP] Creating payment - Amount: %s, Ref: %s", amount, pos_client_ref)
+        _logger.info("[MP] Creating payment - Amount: %s, Ref: %s, Email: %s", amount, pos_client_ref, customer_email)
         
         # ============================================================
         # TEST MODE: Return fake QR for testing UI (no database)
@@ -47,7 +54,7 @@ class PosPaymentMethod(models.Model):
         # ============================================================
         # PRODUCTION MODE: Real MercadoPago API
         # ============================================================
-        return self._create_real_payment(amount, description, pos_client_ref, payment_method_id)
+        return self._create_real_payment(amount, description, pos_client_ref, payment_method_id, customer_email)
 
     def _create_test_payment(self, amount, description, pos_client_ref):
         """
@@ -92,7 +99,7 @@ class PosPaymentMethod(models.Model):
             "qr_data": qr_url,
         }
 
-    def _create_real_payment(self, amount, description, pos_client_ref, payment_method_id):
+    def _create_real_payment(self, amount, description, pos_client_ref, payment_method_id, customer_email=None):
         """
         Creates a real MercadoPago payment via Payments API.
         
@@ -100,6 +107,9 @@ class PosPaymentMethod(models.Model):
         - Only requires Access Token (no terminal/POS device needed)
         - Returns QR code in point_of_interaction.transaction_data
         - Customer scans QR with MercadoPago app to pay
+        
+        Args:
+            customer_email: Email from POS customer, falls back to generic if not provided
         """
         # 1. Get Access Token from system parameters
         config = self.env['ir.config_parameter'].sudo()
@@ -141,6 +151,10 @@ class PosPaymentMethod(models.Model):
         }
         
         # 3. Build payload for QR payment
+        # Use customer email if provided, otherwise use generic fallback
+        payer_email = customer_email if customer_email else "cliente@example.com"
+        _logger.info("[MP] Using payer email: %s (from customer: %s)", payer_email, bool(customer_email))
+        
         # payment_method_id determines how customer pays (QR code)
         payload = {
             "transaction_amount": float(amount),
@@ -148,7 +162,7 @@ class PosPaymentMethod(models.Model):
             "external_reference": pos_client_ref,
             "payment_method_id": "pix",  # This triggers QR generation
             "payer": {
-                "email": "cliente@pos.local",  # Required field, can be generic for POS
+                "email": payer_email,
             },
         }
 

@@ -277,6 +277,10 @@ patch(PaymentScreen.prototype, {
         this.mpState.error = null;
 
         try {
+            // Get customer email if a customer is selected
+            const partner = order.get_partner();
+            const customerEmail = partner && partner.email ? partner.email : null;
+            
             const res = await this.mpOrm.call(
                 "pos.payment.method",
                 "create_mp_payment",
@@ -286,6 +290,7 @@ patch(PaymentScreen.prototype, {
                     description: order.name,
                     pos_client_ref: order.name,
                     payment_method_id: line.payment_method_id.id,
+                    customer_email: customerEmail,
                 }
             );
 
