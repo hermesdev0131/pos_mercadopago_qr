@@ -105,13 +105,18 @@ class PosPaymentMethod(models.Model):
         config = self.env['ir.config_parameter'].sudo()
         token = config.get_param("mp_access_token")
         
-        # DEBUG: Log token info (masked for security)
+        # DEBUG: Log token info - REMOVE IN PRODUCTION!
+        print("=" * 60)
+        print("[MP DEBUG] Access Token from system parameters:")
+        print(f"  Key: 'mp_access_token'")
+        print(f"  Value: {token}")
+        print(f"  Length: {len(token) if token else 0}")
+        print("=" * 60)
+        
         if token:
-            token_preview = f"{token[:10]}...{token[-4:]}" if len(token) > 14 else "***"
-            _logger.info("[MP DEBUG] Access Token found: %s (length: %d)", token_preview, len(token))
+            _logger.info("[MP DEBUG] Access Token found (length: %d)", len(token))
         else:
             _logger.error("[MP DEBUG] Access Token NOT FOUND in system parameters")
-            _logger.info("[MP DEBUG] Looking for key: 'mp_access_token'")
         
         if not token:
             return {"status": "error", "details": "Falta el Access Token de MercadoPago - Configure en Ajustes"}
