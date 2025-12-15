@@ -165,18 +165,33 @@ class PosPaymentMethod(models.Model):
         """
         # 1. Get Access Token from system parameters
         config = self.env['ir.config_parameter'].sudo()
-        token = config.get_param("mp_access_token")
+        token_raw = config.get_param("mp_access_token")
+        
+        # CRITICAL: Strip whitespace (spaces, newlines, tabs) from token
+        # This is a common issue - tokens copied with extra whitespace cause 401 errors
+        token = token_raw.strip() if token_raw else None
         
         # DEBUG: Log token info - REMOVE IN PRODUCTION!
         print("=" * 60)
         print("[MP DEBUG] Access Token from system parameters:")
         print(f"  Key: 'mp_access_token'")
-        print(f"  Value: {token}")
-        print(f"  Length: {len(token) if token else 0}")
+        print(f"  Raw length: {len(token_raw) if token_raw else 0}")
+        print(f"  Trimmed length: {len(token) if token else 0}")
+        print(f"  Token preview: {token[:20]}...{token[-10:] if token and len(token) > 30 else ''}")
+        print(f"  Starts with: {token[:10] if token else 'None'}")
         print("=" * 60)
         
         if token:
-            _logger.info("[MP DEBUG] Access Token found (length: %d)", len(token))
+            _logger.info("[MP DEBUG] Access Token found (length: %d, starts with: %s)", 
+                        len(token), token[:10] if len(token) >= 10 else token)
+            
+            # Verify it's an ACCESS_TOKEN, not a PUBLIC_KEY
+            if token.startswith("APP_USR-") or token.startswith("TEST-"):
+                _logger.info("[MP DEBUG] Token format: ACCESS_TOKEN (correct)")
+            elif token.startswith("APP_") and len(token) < 50:
+                _logger.warning("[MP DEBUG] Token might be PUBLIC_KEY (too short for ACCESS_TOKEN)")
+            else:
+                _logger.warning("[MP DEBUG] Token format unknown - might be invalid")
         else:
             _logger.error("[MP DEBUG] Access Token NOT FOUND in system parameters")
         
@@ -213,15 +228,33 @@ class PosPaymentMethod(models.Model):
             "user_id": token_validation.get("user_id"),
         }
 
-        # 2. Prepare the Payments API request
+        # 2. Verify token is ACCESS_TOKEN, not PUBLIC_KEY
+        # PUBLIC_KEY is shorter and starts with APP_ but is not for API calls
+        if token and len(token) < 50 and token.startswith("APP_"):
+            _logger.error("[MP] ERROR: Token appears to be PUBLIC_KEY, not ACCESS_TOKEN!")
+            _logger.error("[MP] PUBLIC_KEY cannot be used for API calls - use ACCESS_TOKEN instead")
+            return {
+                "status": "error",
+                "details": "Error: Se está usando PUBLIC_KEY en lugar de ACCESS_TOKEN. Use el ACCESS_TOKEN (más largo) para llamadas API.",
+                "debug": {
+                    "token_found": True,
+                    "token_length": len(token),
+                    "token_type": "PUBLIC_KEY (incorrecto)",
+                }
+            }
+        
+        # 3. Prepare the Payments API request
+        # Authorization header format MUST be exact: "Bearer {token}"
         url = "https://api.mercadopago.com/v1/payments"
         headers = {
             "Content-Type": "application/json",
-            "Authorization": f"Bearer {token}",
+            "Authorization": f"Bearer {token}",  # Exact format required by MercadoPago
             "X-Idempotency-Key": str(uuid.uuid4()),  # Prevent duplicate payments
         }
         
-        # 3. Build payload for QR payment
+        _logger.info("[MP DEBUG] Authorization header format: Bearer {token} (correct)")
+        
+        # 4. Build payload for QR payment
         # Use customer email if provided, otherwise use generic fallback
         payer_email = customer_email if customer_email else "cliente@example.com"
         _logger.info("[MP] Using payer email: %s (from customer: %s)", payer_email, bool(customer_email))
@@ -237,7 +270,7 @@ class PosPaymentMethod(models.Model):
             },
         }
 
-        # 4. Make API request
+        # 5. Make API request
         try:
             _logger.info("[MP] Creating payment via /v1/payments: amount=%s, ref=%s", amount, pos_client_ref)
             _logger.info("[MP DEBUG] Request URL: %s", url)
@@ -250,18 +283,47 @@ class PosPaymentMethod(models.Model):
             
             if response.status_code not in (200, 201):
                 error_msg = response.text
-                try:
-                    error_data = response.json()
-                    error_msg = error_data.get("message", response.text)
-                except:
-                    pass
-                _logger.error("[MP] API Error: %s", error_msg)
-                return {"status": "error", "details": error_msg, "debug": token_debug}
+                error_detail = ""
+                
+                # Enhanced error handling for 401 Unauthorized
+                if response.status_code == 401:
+                    try:
+                        error_data = response.json()
+                        error_msg = error_data.get("message", "Unauthorized")
+                        error_detail = error_data.get("error", "")
+                        
+                        # Provide specific diagnostic messages
+                        if "unauthorized" in error_msg.lower() or "invalid" in error_msg.lower():
+                            diagnostic = "Token no autorizado. Verifique:\n"
+                            diagnostic += "1. Está usando ACCESS_TOKEN (no PUBLIC_KEY)\n"
+                            diagnostic += "2. El token no tiene espacios al inicio/final\n"
+                            diagnostic += "3. El token corresponde al ambiente correcto (test/producción)\n"
+                            diagnostic += "4. El token no fue revocado o regenerado"
+                            error_msg = f"{error_msg}\n\n{diagnostic}"
+                    except:
+                        error_msg = "401 Unauthorized - Token inválido o no autorizado"
+                        error_detail = "Verifique que está usando ACCESS_TOKEN (no PUBLIC_KEY)"
+                else:
+                    try:
+                        error_data = response.json()
+                        error_msg = error_data.get("message", response.text)
+                        error_detail = error_data.get("error", "")
+                    except:
+                        pass
+                
+                _logger.error("[MP] API Error [%s]: %s - %s", response.status_code, error_msg, error_detail)
+                return {
+                    "status": "error", 
+                    "details": error_msg,
+                    "error_code": response.status_code,
+                    "error_detail": error_detail,
+                    "debug": token_debug
+                }
 
             data = response.json()
             payment_id = data.get("id")
             
-            # 5. Extract QR code from response
+            # 6. Extract QR code from response
             # The QR is in point_of_interaction.transaction_data
             qr_data = ""
             qr_base64 = ""
