@@ -99,6 +99,58 @@ class PosPaymentMethod(models.Model):
             "qr_data": qr_url,
         }
 
+    def _validate_access_token(self, token):
+        """
+        Validates MercadoPago access token using /users/me API.
+        
+        Returns:
+            dict: {
+                "valid": bool,
+                "token_type": "test" or "production",
+                "user_id": str or None,
+                "error": str or None
+            }
+        """
+        url = "https://api.mercadopago.com/users/me"
+        headers = {
+            "Authorization": f"Bearer {token}",
+        }
+        
+        try:
+            response = requests.get(url, headers=headers, timeout=10)
+            
+            if response.status_code == 200:
+                data = response.json()
+                user_id = data.get("id")
+                # Determine token type from response or token prefix
+                token_type = "test" if token.startswith("TEST-") else "production"
+                
+                _logger.info("[MP] Token validated - User ID: %s, Type: %s", user_id, token_type)
+                return {
+                    "valid": True,
+                    "token_type": token_type,
+                    "user_id": str(user_id) if user_id else None,
+                    "error": None,
+                }
+            else:
+                error_data = response.json() if response.text else {}
+                error_msg = error_data.get("message", f"HTTP {response.status_code}")
+                _logger.error("[MP] Token validation failed: %s", error_msg)
+                return {
+                    "valid": False,
+                    "token_type": None,
+                    "user_id": None,
+                    "error": error_msg,
+                }
+        except Exception as e:
+            _logger.error("[MP] Token validation exception: %s", str(e))
+            return {
+                "valid": False,
+                "token_type": None,
+                "user_id": None,
+                "error": str(e),
+            }
+
     def _create_real_payment(self, amount, description, pos_client_ref, payment_method_id, customer_email=None):
         """
         Creates a real MercadoPago payment via Payments API.
@@ -135,11 +187,30 @@ class PosPaymentMethod(models.Model):
                 "debug": {"token_found": False, "token_length": 0}
             }
         
+        # Validate token using /users/me API
+        token_validation = self._validate_access_token(token)
+        if not token_validation.get("valid"):
+            _logger.error("[MP] Token validation failed: %s", token_validation.get("error"))
+            return {
+                "status": "error",
+                "details": f"Token inválido: {token_validation.get('error', 'Error desconocido')}",
+                "debug": {
+                    "token_found": True,
+                    "token_length": len(token),
+                    "token_preview": f"{token[:15]}...{token[-4:]}" if len(token) > 19 else "too_short",
+                    "token_valid": False,
+                    "validation_error": token_validation.get("error"),
+                }
+            }
+        
         # Include debug info in response (for browser console)
         token_debug = {
             "token_found": True,
             "token_length": len(token),
             "token_preview": f"{token[:15]}...{token[-4:]}" if len(token) > 19 else "too_short",
+            "token_valid": True,
+            "token_type": token_validation.get("token_type", "unknown"),
+            "user_id": token_validation.get("user_id"),
         }
 
         # 2. Prepare the Payments API request
@@ -217,14 +288,14 @@ class PosPaymentMethod(models.Model):
             
             # 6. Log transaction in database (optional, for tracking)
             try:
-                self.env['mp.transaction'].sudo().create({
+            self.env['mp.transaction'].sudo().create({
                     "external_reference": pos_client_ref,
                     "mp_payment_id": str(payment_id),
                     "qr_data": qr_code or qr_base64[:100],
                     "status": data.get("status", "pending"),
-                    "raw_data": json.dumps(data),
-                    "amount": amount,
-                })
+                "raw_data": json.dumps(data),
+                "amount": amount,
+            })
             except Exception as e:
                 _logger.warning("[MP] Could not log transaction: %s", e)
 
@@ -271,10 +342,10 @@ class PosPaymentMethod(models.Model):
         if not token:
             _logger.warning("[MP] No access token for status check")
             # Fallback to database
-            tx = self.env['mp.transaction'].sudo().search([('mp_payment_id', '=', payment_id)], limit=1)
-            if tx:
-                return {"payment_status": tx.status}
-            return {"payment_status": "not_found"}
+        tx = self.env['mp.transaction'].sudo().search([('mp_payment_id', '=', payment_id)], limit=1)
+        if tx:
+            return {"payment_status": tx.status}
+        return {"payment_status": "not_found"}
         
         # Call MercadoPago API
         url = f"https://api.mercadopago.com/v1/payments/{payment_id}"

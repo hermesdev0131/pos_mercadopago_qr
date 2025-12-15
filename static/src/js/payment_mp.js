@@ -256,7 +256,7 @@ patch(PaymentScreen.prototype, {
      */
     async startMercadoPago() {
         const order = this.currentOrder;
-        const line = this.selectedPaymentLine;
+        const line = this.selectedPaymentLine; 
 
         if (!line) {
             this.mpState.status = "error";
@@ -282,9 +282,9 @@ patch(PaymentScreen.prototype, {
             const customerEmail = partner && partner.email ? partner.email : null;
             
             const res = await this.mpOrm.call(
-                "pos.payment.method",
-                "create_mp_payment",
-                [],
+                "pos.payment.method", 
+                "create_mp_payment", 
+                [], 
                 {
                     amount: amount,
                     description: order.name,
