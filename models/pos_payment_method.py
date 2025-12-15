@@ -105,6 +105,14 @@ class PosPaymentMethod(models.Model):
         config = self.env['ir.config_parameter'].sudo()
         token = config.get_param("mp_access_token")
         
+        # DEBUG: Log token info (masked for security)
+        if token:
+            token_preview = f"{token[:10]}...{token[-4:]}" if len(token) > 14 else "***"
+            _logger.info("[MP DEBUG] Access Token found: %s (length: %d)", token_preview, len(token))
+        else:
+            _logger.error("[MP DEBUG] Access Token NOT FOUND in system parameters")
+            _logger.info("[MP DEBUG] Looking for key: 'mp_access_token'")
+        
         if not token:
             return {"status": "error", "details": "Falta el Access Token de MercadoPago - Configure en Ajustes"}
 
@@ -131,9 +139,13 @@ class PosPaymentMethod(models.Model):
         # 4. Make API request
         try:
             _logger.info("[MP] Creating payment via /v1/payments: amount=%s, ref=%s", amount, pos_client_ref)
+            _logger.info("[MP DEBUG] Request URL: %s", url)
+            _logger.info("[MP DEBUG] Payload: %s", json.dumps(payload))
+            
             response = requests.post(url, json=payload, headers=headers, timeout=30)
             
             _logger.info("[MP] Response status: %s", response.status_code)
+            _logger.info("[MP DEBUG] Response body: %s", response.text[:500] if response.text else "empty")
             
             if response.status_code not in (200, 201):
                 error_msg = response.text
