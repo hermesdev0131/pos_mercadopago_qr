@@ -119,7 +119,18 @@ class PosPaymentMethod(models.Model):
             _logger.error("[MP DEBUG] Access Token NOT FOUND in system parameters")
         
         if not token:
-            return {"status": "error", "details": "Falta el Access Token de MercadoPago - Configure en Ajustes"}
+            return {
+                "status": "error", 
+                "details": "Falta el Access Token de MercadoPago - Configure en Ajustes",
+                "debug": {"token_found": False, "token_length": 0}
+            }
+        
+        # Include debug info in response (for browser console)
+        token_debug = {
+            "token_found": True,
+            "token_length": len(token),
+            "token_preview": f"{token[:15]}...{token[-4:]}" if len(token) > 19 else "too_short",
+        }
 
         # 2. Prepare the Payments API request
         url = "https://api.mercadopago.com/v1/payments"
@@ -160,7 +171,7 @@ class PosPaymentMethod(models.Model):
                 except:
                     pass
                 _logger.error("[MP] API Error: %s", error_msg)
-                return {"status": "error", "details": error_msg}
+                return {"status": "error", "details": error_msg, "debug": token_debug}
 
             data = response.json()
             payment_id = data.get("id")

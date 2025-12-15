@@ -289,6 +289,14 @@ patch(PaymentScreen.prototype, {
                 }
             );
 
+            // DEBUG: Log response in browser console
+            console.log("=".repeat(60));
+            console.log("[MP DEBUG] create_mp_payment response:", res);
+            if (res.debug) {
+                console.log("[MP DEBUG] Token info:", res.debug);
+            }
+            console.log("=".repeat(60));
+
             if (res.status !== "success") {
                 this.mpState.status = "error";
                 this.mpState.error = res.details || "Error al crear el pago";
