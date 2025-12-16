@@ -2,6 +2,7 @@ import json
 import logging
 import requests
 import urllib.parse
+import uuid
 
 from odoo import http
 from odoo.http import request
@@ -188,6 +189,15 @@ class MPApiController(http.Controller):
                 "category_id": "services",  # Reduces fraud detection false positives
             }],
             "external_reference": external_reference,
+            # Configure payment methods to enable QR payments
+            "payment_methods": {
+                "excluded_payment_methods": [],
+                "excluded_payment_types": [],
+                "installments": 1,  # Single payment (no installments for QR)
+            },
+            # Force QR payment type if available
+            # Note: Some regions use "pix" for QR, others use "qr_code"
+            "payment_type_id": "qr_code",  # Try QR code payment type
         }
         
         # 6. Make API request
@@ -199,13 +209,16 @@ class MPApiController(http.Controller):
             response = requests.post(url, json=payload, headers=headers, timeout=30)
             
             _logger.info("[MP] Response status: %s", response.status_code)
-            _logger.info("[MP DEBUG] Response body: %s", response.text[:500] if response.text else "empty")
             
             # Parse response
             try:
                 data = response.json()
+                # Log full response structure for debugging
+                _logger.info("[MP DEBUG] Full response structure: %s", json.dumps(data, indent=2)[:2000])
+                _logger.info("[MP DEBUG] Response keys: %s", list(data.keys()) if isinstance(data, dict) else "Not a dict")
             except Exception:
                 data = {"raw": response.text}
+                _logger.warning("[MP DEBUG] Could not parse JSON response: %s", response.text[:500])
             
             # Enhanced error handling matching working implementation
             if response.status_code == 401:
@@ -235,11 +248,11 @@ class MPApiController(http.Controller):
             preference_id = data.get("id")
             qr_data = ""
             
-            # Try to get QR code from preference response
+            # Try to get QR code from preference response (check all possible locations)
             qr_code = data.get("qr_code", "")
             qr_code_base64 = data.get("qr_code_base64", "")
             
-            # Also check in point_of_interaction if present (some responses structure it there)
+            # Check in point_of_interaction if present (some responses structure it there)
             point_of_interaction = data.get("point_of_interaction", {})
             if point_of_interaction:
                 transaction_data = point_of_interaction.get("transaction_data", {})
@@ -247,23 +260,32 @@ class MPApiController(http.Controller):
                     qr_code = qr_code or transaction_data.get("qr_code", "")
                     qr_code_base64 = qr_code_base64 or transaction_data.get("qr_code_base64", "")
             
+            # Also check in payment_methods array if present
+            payment_methods = data.get("payment_methods", [])
+            if payment_methods and isinstance(payment_methods, list):
+                for pm in payment_methods:
+                    if isinstance(pm, dict):
+                        qr_code = qr_code or pm.get("qr_code", "")
+                        qr_code_base64 = qr_code_base64 or pm.get("qr_code_base64", "")
+            
             # Build QR image URL
             if qr_code_base64:
                 # Use base64 data directly as image
                 qr_data = f"data:image/png;base64,{qr_code_base64}"
+                _logger.info("[MP] Found QR code (base64) in preference response")
             elif qr_code:
                 # Generate QR image from code content
                 qr_encoded = urllib.parse.quote(qr_code, safe='')
                 qr_data = f"https://api.qrserver.com/v1/create-qr-code/?size=300x300&data={qr_encoded}"
+                _logger.info("[MP] Found QR code (text) in preference response")
             else:
-                # If no QR in preference, log warning and return error
-                _logger.warning("[MP] No QR data in preference response: %s", json.dumps(data)[:500])
-                _logger.info("[MP] Preference created but no QR code. Preference ID: %s", preference_id)
-                return {
-                    "status": "error", 
-                    "details": "Preferencia creada pero no se recibió código QR. Verifique la configuración de métodos de pago en MercadoPago.",
-                    "preference_id": preference_id
-                }
+                # If no QR in preference, try fallback to /v1/payments API
+                _logger.warning("[MP] No QR data in preference response. Trying fallback to /v1/payments API...")
+                _logger.info("[MP] Preference ID: %s", preference_id)
+                _logger.debug("[MP] Full preference response: %s", json.dumps(data, indent=2)[:1000])
+                
+                # Fallback: Create payment directly via /v1/payments
+                return self._create_mp_payment_fallback(amount, description, external_reference, customer_email, token, token_debug, preference_id)
             
             _logger.info("[MP] Preference created successfully: id=%s", preference_id)
             
@@ -295,6 +317,148 @@ class MPApiController(http.Controller):
             return {"status": "error", "details": f"Error de conexión: {str(e)}"}
         except Exception as e:
             _logger.error("[MP] Unexpected error: %s", str(e))
+            return {"status": "error", "details": str(e)}
+
+    def _create_mp_payment_fallback(self, amount, description, external_reference, customer_email, token, token_debug, preference_id=None):
+        """
+        Fallback method: Create payment directly via /v1/payments API.
+        
+        This is used when Checkout Preferences doesn't return a QR code.
+        The /v1/payments API directly creates QR payments and returns QR in response.
+        
+        Args:
+            amount: Payment amount
+            description: Payment description
+            external_reference: External reference
+            customer_email: Customer email
+            token: Access token
+            token_debug: Debug info
+            preference_id: Optional preference ID (if preference was created)
+        
+        Returns:
+            dict: Same format as _create_mp_preference
+        """
+        _logger.info("[MP] Using fallback: Creating payment via /v1/payments API")
+        
+        url = "https://api.mercadopago.com/v1/payments"
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {token}",
+            "X-Idempotency-Key": str(uuid.uuid4()),  # Prevent duplicate payments
+        }
+        
+        # Use customer email if provided, otherwise use generic fallback
+        payer_email = customer_email if customer_email else "cliente@example.com"
+        _logger.info("[MP] Using payer email: %s (from customer: %s)", payer_email, bool(customer_email))
+        
+        # Build payload for direct payment creation with QR
+        payload = {
+            "transaction_amount": float(amount),
+            "description": description or "Venta POS Odoo",
+            "external_reference": external_reference,
+            "payment_method_id": "pix",  # PIX/QR payment method (works for Argentina and Brazil)
+            "payer": {
+                "email": payer_email,
+            },
+        }
+        
+        try:
+            _logger.info("[MP] Creating payment via /v1/payments: amount=%s, ref=%s", amount, external_reference)
+            _logger.info("[MP DEBUG] Request URL: %s", url)
+            _logger.info("[MP DEBUG] Payload: %s", json.dumps(payload))
+            
+            response = requests.post(url, json=payload, headers=headers, timeout=30)
+            
+            _logger.info("[MP] Response status: %s", response.status_code)
+            
+            # Parse response
+            try:
+                data = response.json()
+                _logger.info("[MP DEBUG] Full payment response: %s", json.dumps(data, indent=2)[:2000])
+            except Exception:
+                data = {"raw": response.text}
+            
+            if response.status_code == 401:
+                error_msg = "Mercado Pago rejected the token (401 unauthorized). Verify you're using the private ACCESS_TOKEN (not the public key), and that it's correct for your environment (test vs production)."
+                _logger.error("[MP] 401 Unauthorized: %s", error_msg)
+                return {
+                    "status": "error",
+                    "error": "unauthorized",
+                    "details": error_msg,
+                    "mp_response": data,
+                    "debug": token_debug
+                }
+            
+            if response.status_code >= 400:
+                error_msg = data.get("message", response.text) if isinstance(data, dict) else response.text
+                _logger.error("[MP] API Error [%s]: %s", response.status_code, error_msg)
+                return {
+                    "status": "error",
+                    "error": "mp_error",
+                    "error_code": response.status_code,
+                    "details": error_msg,
+                    "mp_response": data,
+                    "debug": token_debug
+                }
+            
+            # Extract payment ID and QR code
+            payment_id = data.get("id")
+            qr_data = ""
+            
+            # QR is in point_of_interaction.transaction_data
+            point_of_interaction = data.get("point_of_interaction", {})
+            transaction_data = point_of_interaction.get("transaction_data", {}) if point_of_interaction else {}
+            
+            qr_code = transaction_data.get("qr_code", "")
+            qr_code_base64 = transaction_data.get("qr_code_base64", "")
+            
+            # Build QR image URL
+            if qr_code_base64:
+                qr_data = f"data:image/png;base64,{qr_code_base64}"
+                _logger.info("[MP] Found QR code (base64) in payment response")
+            elif qr_code:
+                qr_encoded = urllib.parse.quote(qr_code, safe='')
+                qr_data = f"https://api.qrserver.com/v1/create-qr-code/?size=300x300&data={qr_encoded}"
+                _logger.info("[MP] Found QR code (text) in payment response")
+            else:
+                _logger.error("[MP] No QR data in payment response either!")
+                return {
+                    "status": "error",
+                    "details": f"No se pudo generar código QR. Preference ID: {preference_id or 'N/A'}, Payment ID: {payment_id or 'N/A'}. Verifique la configuración de métodos de pago en MercadoPago.",
+                    "preference_id": preference_id,
+                    "payment_id": payment_id,
+                }
+            
+            _logger.info("[MP] Payment created successfully via fallback: id=%s", payment_id)
+            
+            # Log transaction in database
+            try:
+                request.env['mp.transaction'].sudo().create({
+                    "external_reference": external_reference,
+                    "mp_payment_id": str(payment_id),
+                    "qr_data": qr_code or qr_code_base64[:100] if qr_code_base64 else "",
+                    "status": data.get("status", "pending"),
+                    "raw_data": json.dumps(data),
+                    "amount": amount,
+                })
+            except Exception as e:
+                _logger.warning("[MP] Could not log transaction: %s", e)
+            
+            return {
+                "status": "success",
+                "payment_id": str(payment_id),
+                "qr_data": qr_data,
+                "preference_id": preference_id,  # Include preference_id if it was created
+            }
+            
+        except requests.exceptions.Timeout:
+            _logger.error("[MP] Fallback request timeout")
+            return {"status": "error", "details": "Timeout de conexión con MercadoPago"}
+        except requests.exceptions.RequestException as e:
+            _logger.error("[MP] Fallback request error: %s", str(e))
+            return {"status": "error", "details": f"Error de conexión: {str(e)}"}
+        except Exception as e:
+            _logger.error("[MP] Fallback unexpected error: %s", str(e))
             return {"status": "error", "details": str(e)}
 
     def _check_mp_payment_status(self, payment_id):
