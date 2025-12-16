@@ -71,8 +71,6 @@ patch(PaymentScreen.prototype, {
         const line = this.paymentLines.find((l) => l.uuid === uuid);
 
         if (line && line.payment_method_id && line.payment_method_id.name === "MercadoPago") {
-            console.log("MP Line Selected (UUID match)");
-            
             const status = line.get_payment_status();
             if (status !== 'done' && status !== 'waitingCard') {
                 this.showMPQRPopup();
@@ -90,7 +88,6 @@ patch(PaymentScreen.prototype, {
         const result = await super.addNewPaymentLine(paymentMethod);
 
         if (paymentMethod.name === "MercadoPago") {
-            console.log("New MP Payment Line Added");
             this.showMPQRPopup();
         }
         return result;
@@ -208,7 +205,7 @@ patch(PaymentScreen.prototype, {
                     { payment_id: this.mpState.payment_id }
                 );
             } catch (e) {
-                console.warn("Could not cancel MP payment:", e);
+                // Ignore cancel errors
             }
         }
         
@@ -223,9 +220,8 @@ patch(PaymentScreen.prototype, {
         if (lineUuid) {
             try {
                 await super.deletePaymentLine(lineUuid);
-                console.log("[MP] Payment line deleted after cancel");
             } catch (e) {
-                console.warn("Could not delete payment line:", e);
+                // Ignore delete errors
             }
         }
         
@@ -243,7 +239,7 @@ patch(PaymentScreen.prototype, {
         try {
             await this.validateOrder(false);
         } catch (e) {
-            console.error("Error validating order:", e);
+            // Ignore validation errors
         }
     },
 
@@ -294,14 +290,6 @@ patch(PaymentScreen.prototype, {
                 }
             );
 
-            // DEBUG: Log response in browser console
-            console.log("=".repeat(60));
-            console.log("[MP DEBUG] create_mp_payment response:", res);
-            if (res.debug) {
-                console.log("[MP DEBUG] Token info:", res.debug);
-            }
-            console.log("=".repeat(60));
-
             if (res.status !== "success") {
                 this.mpState.status = "error";
                 this.mpState.error = res.details || "Error al crear el pago";
@@ -317,7 +305,6 @@ patch(PaymentScreen.prototype, {
             this._pollPaymentStatus();
 
         } catch (err) {
-            console.error("MercadoPago Error:", err);
             this.mpState.status = "error";
             this.mpState.error = "Error de conexión con MercadoPago";
         }
@@ -339,8 +326,6 @@ patch(PaymentScreen.prototype, {
                 [],
                 { payment_id: this.mpState.payment_id }
             );
-
-            console.log("[MP] Poll status:", res.payment_status);
 
             // Payment approved
             if (res.payment_status === "approved") {
@@ -374,14 +359,12 @@ patch(PaymentScreen.prototype, {
                 return;
             }
 
-            // Unknown status - but don't error out immediately, keep trying
-            console.warn("[MP] Unknown status, will retry:", res.payment_status);
+            // Unknown status - keep trying
             if (this.mpState.pollActive) {
                 setTimeout(() => this._pollPaymentStatus(), 3000);
             }
 
         } catch (e) {
-            console.error("Polling error:", e);
             // On network error, retry after a longer delay
             if (this.mpState.pollActive) {
                 setTimeout(() => this._pollPaymentStatus(), 5000);
