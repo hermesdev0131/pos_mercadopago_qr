@@ -1,12 +1,9 @@
 import json
-import logging
 import requests
 import urllib.parse
 
 from odoo import http
 from odoo.http import request
-
-_logger = logging.getLogger(__name__)
 
 
 class MPApiController(http.Controller):
@@ -55,7 +52,6 @@ class MPApiController(http.Controller):
                 # Determine token type from response or token prefix
                 token_type = "test" if token.startswith("TEST-") else "production"
                 
-                _logger.info("[MP] Token validated - User ID: %s, Type: %s", user_id, token_type)
                 return {
                     "valid": True,
                     "token_type": token_type,
@@ -65,7 +61,6 @@ class MPApiController(http.Controller):
             else:
                 error_data = response.json() if response.text else {}
                 error_msg = error_data.get("message", f"HTTP {response.status_code}")
-                _logger.error("[MP] Token validation failed: %s", error_msg)
                 return {
                     "valid": False,
                     "token_type": None,
@@ -73,7 +68,6 @@ class MPApiController(http.Controller):
                     "error": error_msg,
                 }
         except Exception as e:
-            _logger.error("[MP] Token validation exception: %s", str(e))
             return {
                 "valid": False,
                 "token_type": None,
@@ -102,72 +96,31 @@ class MPApiController(http.Controller):
                 "status": "success" or "error",
                 "payment_id": str (preference ID),
                 "qr_data": str (QR image URL or base64),
-                "details": str (error message if status="error"),
-                "debug": dict (debug info for browser console)
+                "details": str (error message if status="error")
             }
         """
         # 1. Get Access Token
         token = self._get_access_token()
         
-        # DEBUG: Log token info
-        if token:
-            _logger.info("[MP DEBUG] Access Token found (length: %d, starts with: %s)", 
-                        len(token), token[:10] if len(token) >= 10 else token)
-            
-            # Verify it's an ACCESS_TOKEN, not a PUBLIC_KEY
-            if token.startswith("APP_USR-") or token.startswith("TEST-"):
-                _logger.info("[MP DEBUG] Token format: ACCESS_TOKEN (correct)")
-            elif token.startswith("APP_") and len(token) < 50:
-                _logger.warning("[MP DEBUG] Token might be PUBLIC_KEY (too short for ACCESS_TOKEN)")
-            else:
-                _logger.warning("[MP DEBUG] Token format unknown - might be invalid")
-        else:
-            _logger.error("[MP DEBUG] Access Token NOT FOUND in system parameters")
-        
         if not token:
             return {
                 "status": "error", 
                 "details": "Falta el Access Token de MercadoPago - Configure en Ajustes",
-                "debug": {"token_found": False, "token_length": 0}
             }
         
         # 2. Validate token
         token_validation = self._validate_access_token(token)
         if not token_validation.get("valid"):
-            _logger.error("[MP] Token validation failed: %s", token_validation.get("error"))
             return {
                 "status": "error",
                 "details": f"Token inválido: {token_validation.get('error', 'Error desconocido')}",
-                "debug": {
-                    "token_found": True,
-                    "token_length": len(token),
-                    "token_preview": f"{token[:15]}...{token[-4:]}" if len(token) > 19 else "too_short",
-                    "token_valid": False,
-                    "validation_error": token_validation.get("error"),
-                }
             }
         
-        # Include debug info in response (for browser console)
-        token_debug = {
-            "token_found": True,
-            "token_length": len(token),
-            "token_preview": f"{token[:15]}...{token[-4:]}" if len(token) > 19 else "too_short",
-            "token_valid": True,
-            "token_type": token_validation.get("token_type", "unknown"),
-            "user_id": token_validation.get("user_id"),
-        }
-
         # 3. Verify token is ACCESS_TOKEN, not PUBLIC_KEY
         if token and len(token) < 50 and token.startswith("APP_"):
-            _logger.error("[MP] ERROR: Token appears to be PUBLIC_KEY, not ACCESS_TOKEN!")
             return {
                 "status": "error",
                 "details": "Error: Se está usando PUBLIC_KEY en lugar de ACCESS_TOKEN. Use el ACCESS_TOKEN (más largo) para llamadas API.",
-                "debug": {
-                    "token_found": True,
-                    "token_length": len(token),
-                    "token_type": "PUBLIC_KEY (incorrecto)",
-                }
             }
         
         # 4. Prepare the Checkout Preferences API request
@@ -192,14 +145,8 @@ class MPApiController(http.Controller):
         
         # 6. Make API request
         try:
-            _logger.info("[MP] Creating preference via /checkout/preferences: amount=%s, ref=%s", amount, external_reference)
-            _logger.info("[MP DEBUG] Request URL: %s", url)
-            _logger.info("[MP DEBUG] Payload: %s", json.dumps(payload))
             
             response = requests.post(url, json=payload, headers=headers, timeout=30)
-            
-            _logger.info("[MP] Response status: %s", response.status_code)
-            _logger.info("[MP DEBUG] Response body: %s", response.text[:500] if response.text else "empty")
             
             # Parse response
             try:
@@ -207,109 +154,67 @@ class MPApiController(http.Controller):
             except Exception:
                 data = {"raw": response.text}
             
-            # Enhanced error handling matching working implementation
+            # Error handling
             if response.status_code == 401:
-                error_msg = "Mercado Pago rejected the token (401 unauthorized). Verify you're using the private ACCESS_TOKEN (not the public key), and that it's correct for your environment (test vs production)."
-                _logger.error("[MP] 401 Unauthorized: %s", error_msg)
                 return {
                     "status": "error",
                     "error": "unauthorized",
-                    "details": error_msg,
-                    "mp_response": data,
-                    "debug": token_debug
+                    "details": "Mercado Pago rechazó el token (401). Verifique que está usando ACCESS_TOKEN (no PUBLIC_KEY) y que es correcto para su ambiente (test vs producción).",
                 }
             
             if response.status_code >= 400:
                 error_msg = data.get("message", response.text) if isinstance(data, dict) else response.text
-                _logger.error("[MP] API Error [%s]: %s", response.status_code, error_msg)
                 return {
                     "status": "error",
                     "error": "mp_error",
                     "error_code": response.status_code,
                     "details": error_msg,
-                    "mp_response": data,
-                    "debug": token_debug
                 }
 
             # 7. Extract QR code from preference response
             preference_id = data.get("id")
             qr_data = ""
-            qr_source = ""  # Track where we got the QR from (for logging)
-            
-            # Log full response structure for debugging
-            _logger.info("[MP DEBUG] Preference response keys: %s", list(data.keys()) if isinstance(data, dict) else "Not a dict")
-            _logger.info("[MP DEBUG] Full preference response: %s", json.dumps(data, indent=2)[:2000])
             
             # Try to get QR code from preference response - check all possible locations
             
-            # 1. Check root level qr_code_base64
+            # 1. Check root level qr_code_base64 and qr_code
             qr_code_base64 = data.get("qr_code_base64", "")
-            if qr_code_base64:
-                qr_source = "qr_code_base64 (root)"
-            
-            # 2. Check root level qr_code
             qr_code = data.get("qr_code", "")
-            if qr_code and not qr_code_base64:
-                qr_source = "qr_code (root)"
             
-            # 3. Check in point_of_interaction.transaction_data
+            # 2. Check in point_of_interaction.transaction_data
             point_of_interaction = data.get("point_of_interaction", {})
             if point_of_interaction:
                 transaction_data = point_of_interaction.get("transaction_data", {})
                 if transaction_data:
                     if not qr_code_base64:
                         qr_code_base64 = transaction_data.get("qr_code_base64", "")
-                        if qr_code_base64:
-                            qr_source = "point_of_interaction.transaction_data.qr_code_base64"
                     if not qr_code:
                         qr_code = transaction_data.get("qr_code", "")
-                        if qr_code:
-                            qr_source = "point_of_interaction.transaction_data.qr_code"
             
-            # 4. Check init_point (payment link) - can be converted to QR
+            # 3. Check init_point (payment link) - can be converted to QR
             init_point = data.get("init_point", "")
             sandbox_init_point = data.get("sandbox_init_point", "")  # For test mode
             
-            _logger.info("[MP DEBUG] QR extraction results:")
-            _logger.info("[MP DEBUG]   qr_code_base64: %s", "Found" if qr_code_base64 else "Not found")
-            _logger.info("[MP DEBUG]   qr_code: %s", "Found" if qr_code else "Not found")
-            _logger.info("[MP DEBUG]   init_point: %s", init_point[:50] + "..." if init_point else "Not found")
-            _logger.info("[MP DEBUG]   sandbox_init_point: %s", sandbox_init_point[:50] + "..." if sandbox_init_point else "Not found")
-            
             # Build QR image URL - try in order of preference
             if qr_code_base64:
-                # Use base64 data directly as image
                 qr_data = f"data:image/png;base64,{qr_code_base64}"
-                _logger.info("[MP] Using QR from: %s", qr_source)
             elif qr_code:
-                # Generate QR image from code content
                 qr_encoded = urllib.parse.quote(qr_code, safe='')
                 qr_data = f"https://api.qrserver.com/v1/create-qr-code/?size=300x300&data={qr_encoded}"
-                _logger.info("[MP] Using QR from: %s", qr_source)
             elif init_point:
                 # Convert payment link to QR code image
-                # This is the standard way - preference returns a payment link that can be scanned
                 qr_encoded = urllib.parse.quote(init_point, safe='')
                 qr_data = f"https://api.qrserver.com/v1/create-qr-code/?size=300x300&data={qr_encoded}"
-                qr_source = "init_point (payment link)"
-                _logger.info("[MP] Using init_point as QR source: %s", init_point)
             elif sandbox_init_point:
                 # Use sandbox link for test mode
                 qr_encoded = urllib.parse.quote(sandbox_init_point, safe='')
                 qr_data = f"https://api.qrserver.com/v1/create-qr-code/?size=300x300&data={qr_encoded}"
-                qr_source = "sandbox_init_point (test mode)"
-                _logger.info("[MP] Using sandbox_init_point as QR source: %s", sandbox_init_point)
             else:
-                # No QR source found at all
-                _logger.error("[MP] No QR data or init_point in preference response!")
-                _logger.error("[MP] Preference ID: %s", preference_id)
                 return {
                     "status": "error", 
                     "details": "Preferencia creada pero no se recibió código QR ni enlace de pago. Verifique la configuración de métodos de pago en MercadoPago.",
                     "preference_id": preference_id
                 }
-            
-            _logger.info("[MP] Preference created successfully: id=%s", preference_id)
             
             # 8. Log transaction in database (optional, for tracking)
             try:
@@ -322,7 +227,7 @@ class MPApiController(http.Controller):
                     "amount": amount,
                 })
             except Exception as e:
-                _logger.warning("[MP] Could not log transaction: %s", e)
+                pass  # Ignore transaction logging errors
 
             return {
                 "status": "success",
@@ -332,13 +237,10 @@ class MPApiController(http.Controller):
             }
 
         except requests.exceptions.Timeout:
-            _logger.error("[MP] Request timeout")
             return {"status": "error", "details": "Timeout de conexión con MercadoPago"}
         except requests.exceptions.RequestException as e:
-            _logger.error("[MP] Request error: %s", str(e))
             return {"status": "error", "details": f"Error de conexión: {str(e)}"}
         except Exception as e:
-            _logger.error("[MP] Unexpected error: %s", str(e))
             return {"status": "error", "details": str(e)}
 
     def _check_mp_payment_status(self, payment_id, external_reference=None):
@@ -362,7 +264,6 @@ class MPApiController(http.Controller):
         token = self._get_access_token()
         
         if not token:
-            _logger.warning("[MP] No access token for status check")
             # Fallback to database
             tx = request.env['mp.transaction'].sudo().search([('mp_payment_id', '=', payment_id)], limit=1)
             if tx:
@@ -370,25 +271,21 @@ class MPApiController(http.Controller):
             return {"payment_status": "not_found"}
         
         # Use /v1/payments/search to find payments by external_reference
-        # This works better with Checkout Preferences since preference_id != payment_id
         headers = {
             "Authorization": f"Bearer {token}",
         }
         
-        # First try: Search by external_reference if provided
+        # Search by external_reference if provided
         if external_reference:
             search_url = f"https://api.mercadopago.com/v1/payments/search?external_reference={external_reference}"
-            _logger.info("[MP] Searching payments by external_reference: %s", external_reference)
         else:
             # Fallback: Try to get external_reference from local transaction
             tx = request.env['mp.transaction'].sudo().search([('mp_payment_id', '=', payment_id)], limit=1)
             if tx and tx.external_reference:
                 search_url = f"https://api.mercadopago.com/v1/payments/search?external_reference={tx.external_reference}"
-                _logger.info("[MP] Searching payments by external_reference from DB: %s", tx.external_reference)
             else:
                 # Last resort: search with sort by date_created
                 search_url = f"https://api.mercadopago.com/v1/payments/search?sort=date_created&criteria=desc"
-                _logger.info("[MP] Searching recent payments (no external_reference available)")
         
         try:
             response = requests.get(search_url, headers=headers, timeout=20)
@@ -399,8 +296,6 @@ class MPApiController(http.Controller):
             except Exception:
                 data = {"raw": response.text}
             
-            _logger.info("[MP DEBUG] Payment search response status: %s", response.status_code)
-            
             if response.status_code == 200:
                 results = data.get("results", [])
                 
@@ -410,8 +305,6 @@ class MPApiController(http.Controller):
                     status = payment.get("status", "pending")
                     status_detail = payment.get("status_detail", "")
                     actual_payment_id = payment.get("id")
-                    
-                    _logger.info("[MP] Found payment %s with status: %s (%s)", actual_payment_id, status, status_detail)
                     
                     # Update local transaction record if exists
                     tx = request.env['mp.transaction'].sudo().search([('mp_payment_id', '=', payment_id)], limit=1)
@@ -428,11 +321,9 @@ class MPApiController(http.Controller):
                     }
                 else:
                     # No payments found yet - still pending
-                    _logger.info("[MP] No payments found for external_reference, status: pending")
                     return {"payment_status": "pending"}
             
             elif response.status_code == 401:
-                _logger.error("[MP] 401 Unauthorized when checking payment status")
                 # Fallback to database
                 tx = request.env['mp.transaction'].sudo().search([('mp_payment_id', '=', payment_id)], limit=1)
                 if tx:
@@ -440,7 +331,6 @@ class MPApiController(http.Controller):
                 return {"payment_status": "pending"}
             
             elif response.status_code >= 400:
-                _logger.error("[MP] Status check error [%s]: %s", response.status_code, response.text)
                 # Fallback to database
                 tx = request.env['mp.transaction'].sudo().search([('mp_payment_id', '=', payment_id)], limit=1)
                 if tx:
@@ -448,10 +338,8 @@ class MPApiController(http.Controller):
                 return {"payment_status": "pending"}
                 
         except requests.exceptions.Timeout:
-            _logger.warning("[MP] Status check timeout for %s", payment_id)
             return {"payment_status": "pending"}
-        except Exception as e:
-            _logger.error("[MP] Status check error: %s", str(e))
+        except Exception:
             return {"payment_status": "pending"}
 
     # ------------------------------------------------------------------
