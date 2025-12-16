@@ -35,13 +35,6 @@ patch(PaymentScreen.prototype, {
         });
     },
 
-    // =====================================================
-    // OVERRIDE: Block order validation while MP is active
-    // =====================================================
-    
-    /**
-     * Override to block validation while MercadoPago payment is pending
-     */
     async validateOrder(isForceValidate) {
         if (this._isMPPaymentPending()) {
             this.mpNotification.add(
@@ -53,17 +46,11 @@ patch(PaymentScreen.prototype, {
         return super.validateOrder(isForceValidate);
     },
 
-    /**
-     * Check if there's a pending MercadoPago payment
-     */
     _isMPPaymentPending() {
         return this.mpState.visible && 
                (this.mpState.status === "pending" || this.mpState.status === "loading");
     },
 
-    // =====================================================
-    // OVERRIDE: Handle payment line selection
-    // =====================================================
     
     selectPaymentLine(uuid) {
         super.selectPaymentLine(uuid);
@@ -80,9 +67,6 @@ patch(PaymentScreen.prototype, {
         }
     },
 
-    // =====================================================
-    // OVERRIDE: Handle new payment line
-    // =====================================================
     
     async addNewPaymentLine(paymentMethod) {
         const result = await super.addNewPaymentLine(paymentMethod);
@@ -92,10 +76,6 @@ patch(PaymentScreen.prototype, {
         }
         return result;
     },
-
-    // =====================================================
-    // OVERRIDE: Block payment method changes while pending
-    // =====================================================
     
     async deletePaymentLine(uuid) {
         const line = this.paymentLines.find((l) => l.uuid === uuid);
@@ -112,10 +92,6 @@ patch(PaymentScreen.prototype, {
         
         return super.deletePaymentLine(uuid);
     },
-
-    // =====================================================
-    // POPUP MANAGEMENT
-    // =====================================================
     
     showMPQRPopup() {
         this.mpState.visible = true;
@@ -131,9 +107,6 @@ patch(PaymentScreen.prototype, {
         }
     },
     
-    /**
-     * Get the current MP payment amount from the selected payment line
-     */
     _getMPAmount() {
         const line = this.selectedPaymentLine;
         if (line && line.payment_method_id && line.payment_method_id.name === "MercadoPago") {
@@ -150,9 +123,6 @@ patch(PaymentScreen.prototype, {
         this.mpState.visible = false;
     },
 
-    /**
-     * Props getter for the MPQRPopup component
-     */
     get mpqrPopupProps() {
         if (!this.mpState.visible) return null;
         
@@ -169,33 +139,25 @@ patch(PaymentScreen.prototype, {
         };
     },
 
-    // =====================================================
-    // POPUP CALLBACKS
-    // =====================================================
     
     _handleMPRetry() {
         this.mpState.status = "loading";
         this.mpState.error = null;
         this.mpState.qr_url = null;
         
-        // Automatically retry QR generation
         setTimeout(() => this.startMercadoPago(), 100);
     },
 
     _handleMPClose() {
-        // Just close the popup
         this.hideMPQRPopup();
     },
 
     async _handleMPCancel() {
-        // Stop polling
         this.mpState.pollActive = false;
         
-        // Get the current MP payment line before cancelling
         const line = this.selectedPaymentLine;
         const lineUuid = line ? line.uuid : null;
         
-        // If there's an active payment, try to cancel it on the backend
         if (this.mpState.payment_id) {
             try {
                 await this.mpOrm.call(
@@ -205,23 +167,27 @@ patch(PaymentScreen.prototype, {
                     { payment_id: this.mpState.payment_id }
                 );
             } catch (e) {
-                // Ignore cancel errors
+                this.mpNotification.add(
+                    `Error al cancelar pago: ${e.message || e}`,
+                    { type: "danger", title: "Error" }
+                );
             }
         }
         
-        // Reset state and hide popup
         this.mpState.status = "idle";
         this.mpState.payment_id = null;
         this.mpState.qr_url = null;
         this.mpState.error = null;
         this.hideMPQRPopup();
         
-        // Delete the MercadoPago payment line
         if (lineUuid) {
             try {
                 await super.deletePaymentLine(lineUuid);
             } catch (e) {
-                // Ignore delete errors
+                this.mpNotification.add(
+                    `Error al eliminar línea: ${e.message || e}`,
+                    { type: "danger", title: "Error" }
+                );
             }
         }
         
@@ -232,24 +198,19 @@ patch(PaymentScreen.prototype, {
     },
 
     async _handleMPNewOrder() {
-        // Hide the popup
         this.hideMPQRPopup();
         
-        // Validate the current order (complete the sale)
         try {
             await this.validateOrder(false);
         } catch (e) {
-            // Ignore validation errors
+            this.mpNotification.add(
+                `Error al validar orden: ${e.message || e}`,
+                { type: "danger", title: "Error" }
+            );
         }
     },
 
-    // =====================================================
-    // MERCADOPAGO API CALLS
-    // =====================================================
     
-    /**
-     * Start the MercadoPago payment flow
-     */
     async startMercadoPago() {
         const order = this.currentOrder;
         const line = this.selectedPaymentLine; 
@@ -260,7 +221,6 @@ patch(PaymentScreen.prototype, {
             return;
         }
 
-        // Get amount from payment line
         const amount = this._getMPAmount();
         
         if (!amount || amount <= 0) {
@@ -273,7 +233,6 @@ patch(PaymentScreen.prototype, {
         this.mpState.error = null;
 
         try {
-            // Get customer email if a customer is selected
             const partner = order.get_partner();
             const customerEmail = partner && partner.email ? partner.email : null;
             
@@ -296,7 +255,6 @@ patch(PaymentScreen.prototype, {
                 return;
             }
 
-            // Success - show QR and start polling
             this.mpState.status = "pending";
             this.mpState.qr_url = res.qr_data;
             this.mpState.payment_id = res.payment_id;
@@ -306,15 +264,12 @@ patch(PaymentScreen.prototype, {
 
         } catch (err) {
             this.mpState.status = "error";
-            this.mpState.error = "Error de conexión con MercadoPago";
+            this.mpState.error = err.message || "Error de conexión con MercadoPago";
         }
     },
 
-    /**
-     * Poll for payment status updates
-     */
     async _pollPaymentStatus() {
-        // Check if we should continue polling
+        
         if (!this.mpState.payment_id || !this.mpState.visible || !this.mpState.pollActive) {
             return;
         }

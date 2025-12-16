@@ -9,13 +9,9 @@ import urllib.parse
 
 _logger = logging.getLogger(__name__)
 
-# ============================================================
-# TEST MODE CONFIGURATION
-# ============================================================
 MP_TEST_MODE = False           # Set to False for real MercadoPago API
 MP_AUTO_APPROVE_SECONDS = 10  # Auto-approve test payments after X seconds (0 to disable)
 
-# In-memory storage for test payments (no database needed)
 _test_payments = {}
 
 
@@ -45,16 +41,9 @@ class PosPaymentMethod(models.Model):
         """
         _logger.info("[MP] Creating payment - Amount: %s, Ref: %s, Email: %s", amount, pos_client_ref, customer_email)
         
-        # ============================================================
-        # TEST MODE: Return fake QR for testing UI (no database)
-        # ============================================================
         if MP_TEST_MODE:
             return self._create_test_payment(amount, description, pos_client_ref)
         
-        # ============================================================
-        # PRODUCTION MODE: Delegate to controller
-        # ============================================================
-        # Import controller here to avoid circular imports
         from ..controllers.mp_api import MPApiController
         
         controller = MPApiController()
@@ -67,15 +56,12 @@ class PosPaymentMethod(models.Model):
         """
         global _test_payments
         
-        # Generate unique payment ID
         payment_id = f"TEST-{uuid.uuid4().hex[:12].upper()}"
-        
-        # Generate QR code using free API (URL-encode the data)
+
         qr_content = f"mp://pay/{payment_id}/{amount}"
         qr_data_encoded = urllib.parse.quote(qr_content, safe='')
         qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=300x300&data={qr_data_encoded}"
         
-        # Store in memory (no database)
         _test_payments[payment_id] = {
             "payment_id": payment_id,
             "amount": amount,
@@ -85,7 +71,6 @@ class PosPaymentMethod(models.Model):
             "status": "pending",
         }
         
-        # Auto-approve after delay (for testing)
         if MP_AUTO_APPROVE_SECONDS > 0:
             thread = threading.Thread(
                 target=_auto_approve_payment,
@@ -114,7 +99,6 @@ class PosPaymentMethod(models.Model):
         """
         global _test_payments
         
-        # TEST MODE: Check in-memory storage
         if MP_TEST_MODE:
             if payment_id in _test_payments:
                 status = _test_payments[payment_id]["status"]
@@ -123,7 +107,6 @@ class PosPaymentMethod(models.Model):
             if payment_id and payment_id.startswith("TEST-"):
                 return {"payment_status": "pending"}
         
-        # PRODUCTION MODE: Delegate to controller
         from ..controllers.mp_api import MPApiController
         
         controller = MPApiController()
@@ -136,7 +119,6 @@ class PosPaymentMethod(models.Model):
         """
         global _test_payments
         
-        # TEST MODE: Update in-memory
         if MP_TEST_MODE and payment_id in _test_payments:
             _test_payments[payment_id]["status"] = "cancelled"
             _logger.info("[MP TEST] Payment %s cancelled", payment_id)

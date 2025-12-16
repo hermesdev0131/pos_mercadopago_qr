@@ -23,7 +23,7 @@ class MPApiController(http.Controller):
         """
         config = request.env['ir.config_parameter'].sudo()
         token_raw = config.get_param("mp_access_token") or config.get_param("mp.access.token")
-        # Strip whitespace (common issue - tokens copied with extra spaces)
+        
         return token_raw.strip() if token_raw else None
 
     def _validate_access_token(self, token):
@@ -49,7 +49,6 @@ class MPApiController(http.Controller):
             if response.status_code == 200:
                 data = response.json()
                 user_id = data.get("id")
-                # Determine token type from response or token prefix
                 token_type = "test" if token.startswith("TEST-") else "production"
                 
                 return {
@@ -148,13 +147,11 @@ class MPApiController(http.Controller):
             
             response = requests.post(url, json=payload, headers=headers, timeout=30)
             
-            # Parse response
             try:
                 data = response.json()
             except Exception:
                 data = {"raw": response.text}
             
-            # Error handling
             if response.status_code == 401:
                 return {
                     "status": "error",
@@ -202,11 +199,9 @@ class MPApiController(http.Controller):
                 qr_encoded = urllib.parse.quote(qr_code, safe='')
                 qr_data = f"https://api.qrserver.com/v1/create-qr-code/?size=300x300&data={qr_encoded}"
             elif init_point:
-                # Convert payment link to QR code image
                 qr_encoded = urllib.parse.quote(init_point, safe='')
                 qr_data = f"https://api.qrserver.com/v1/create-qr-code/?size=300x300&data={qr_encoded}"
             elif sandbox_init_point:
-                # Use sandbox link for test mode
                 qr_encoded = urllib.parse.quote(sandbox_init_point, safe='')
                 qr_data = f"https://api.qrserver.com/v1/create-qr-code/?size=300x300&data={qr_encoded}"
             else:
@@ -227,7 +222,7 @@ class MPApiController(http.Controller):
                     "amount": amount,
                 })
             except Exception as e:
-                pass  # Ignore transaction logging errors
+                pass  
 
             return {
                 "status": "success",
@@ -275,22 +270,18 @@ class MPApiController(http.Controller):
             "Authorization": f"Bearer {token}",
         }
         
-        # Search by external_reference if provided
         if external_reference:
             search_url = f"https://api.mercadopago.com/v1/payments/search?external_reference={external_reference}"
         else:
-            # Fallback: Try to get external_reference from local transaction
             tx = request.env['mp.transaction'].sudo().search([('mp_payment_id', '=', payment_id)], limit=1)
             if tx and tx.external_reference:
                 search_url = f"https://api.mercadopago.com/v1/payments/search?external_reference={tx.external_reference}"
             else:
-                # Last resort: search with sort by date_created
                 search_url = f"https://api.mercadopago.com/v1/payments/search?sort=date_created&criteria=desc"
         
         try:
             response = requests.get(search_url, headers=headers, timeout=20)
             
-            # Parse response
             try:
                 data = response.json()
             except Exception:
@@ -324,14 +315,12 @@ class MPApiController(http.Controller):
                     return {"payment_status": "pending"}
             
             elif response.status_code == 401:
-                # Fallback to database
                 tx = request.env['mp.transaction'].sudo().search([('mp_payment_id', '=', payment_id)], limit=1)
                 if tx:
                     return {"payment_status": tx.status}
                 return {"payment_status": "pending"}
             
             elif response.status_code >= 400:
-                # Fallback to database
                 tx = request.env['mp.transaction'].sudo().search([('mp_payment_id', '=', payment_id)], limit=1)
                 if tx:
                     return {"payment_status": tx.status}
@@ -341,10 +330,7 @@ class MPApiController(http.Controller):
             return {"payment_status": "pending"}
         except Exception:
             return {"payment_status": "pending"}
-
-    # ------------------------------------------------------------------
-    # HTTP Routes (optional - for external access or webhooks)
-    # ------------------------------------------------------------------
+            
 
     @http.route('/mp/pos/create_preference', type='json', auth='user', csrf=False)
     def create_preference_http(self, **kwargs):
