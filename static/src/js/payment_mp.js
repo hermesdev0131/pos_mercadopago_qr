@@ -76,7 +76,7 @@ patch(PaymentScreen.prototype, {
         }
         return result;
     },
-    
+
     async deletePaymentLine(uuid) {
         const line = this.paymentLines.find((l) => l.uuid === uuid);
         
