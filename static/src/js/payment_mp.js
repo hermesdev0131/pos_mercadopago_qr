@@ -30,6 +30,7 @@ patch(PaymentScreen.prototype, {
             status: "idle",      // idle | loading | pending | approved | error
             qr_url: null,
             payment_id: null,
+            external_reference: null,  // Store external reference for accurate payment status checking
             error: null,
             pollActive: false,   // Flag to control polling
         });
@@ -101,6 +102,7 @@ patch(PaymentScreen.prototype, {
             this.mpState.status = "loading";
             this.mpState.error = null;
             this.mpState.qr_url = null;
+            this.mpState.external_reference = null;
             
             // Automatically start QR generation
             setTimeout(() => this.startMercadoPago(), 100);
@@ -176,6 +178,7 @@ patch(PaymentScreen.prototype, {
         
         this.mpState.status = "idle";
         this.mpState.payment_id = null;
+        this.mpState.external_reference = null;
         this.mpState.qr_url = null;
         this.mpState.error = null;
         this.hideMPQRPopup();
@@ -258,6 +261,7 @@ patch(PaymentScreen.prototype, {
             this.mpState.status = "pending";
             this.mpState.qr_url = res.qr_data;
             this.mpState.payment_id = res.payment_id;
+            this.mpState.external_reference = order.name;  // Store external reference for accurate status checking
             this.mpState.pollActive = true;
             
             this._pollPaymentStatus();
@@ -279,7 +283,10 @@ patch(PaymentScreen.prototype, {
                 "pos.payment.method",
                 "check_mp_status",
                 [],
-                { payment_id: this.mpState.payment_id }
+                { 
+                    payment_id: this.mpState.payment_id,
+                    external_reference: this.mpState.external_reference
+                }
             );
 
             // Payment approved

@@ -90,12 +90,16 @@ class PosPaymentMethod(models.Model):
 
 
     @api.model
-    def check_mp_status(self, payment_id):
+    def check_mp_status(self, payment_id, external_reference=None):
         """
         Check status of a payment by polling MercadoPago API.
         
-        Uses GET /v1/payments/{id} to get real-time status.
+        Uses GET /v1/payments/search to find payments by external_reference.
         Status values: pending, approved, rejected, cancelled, in_process
+        
+        Args:
+            payment_id: MercadoPago preference ID
+            external_reference: Optional external reference for the order
         """
         global _test_payments
         
@@ -110,7 +114,14 @@ class PosPaymentMethod(models.Model):
         from ..controllers.mp_api import MPApiController
         
         controller = MPApiController()
-        return controller._check_mp_payment_status(payment_id)
+        
+        # If external_reference not provided, try to get it from transaction
+        if not external_reference:
+            tx = self.env['mp.transaction'].sudo().search([('mp_payment_id', '=', payment_id)], limit=1)
+            if tx and tx.external_reference:
+                external_reference = tx.external_reference
+        
+        return controller._check_mp_payment_status(payment_id, external_reference)
 
     @api.model
     def cancel_mp_payment(self, payment_id):
