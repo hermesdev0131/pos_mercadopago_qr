@@ -240,151 +240,69 @@ class MPApiController(http.Controller):
             return {"status": "error", "details": str(e)}
 
     def _check_mp_payment_status(self, payment_id, external_reference=None):
-        """
-        Check status of a payment by polling MercadoPago API.
+    """
+    Check status of a payment by polling MercadoPago API.
+    Matches specifically by preference_id to ensure the POS only approves 
+    the payment for the CURRENTLY displayed QR code.
+    """
+    token = self._get_access_token()
+    
+    # 1. Retrieve the local transaction record
+    tx = request.env['mp.transaction'].sudo().search([('mp_payment_id', '=', payment_id)], limit=1)
+    
+    if not token:
+        return {"payment_status": tx.status if tx else "pending"}
+    
+    # 2. Use external_reference from parameter or transaction as a search filter
+    if not external_reference and tx:
+        external_reference = tx.external_reference
+    
+    # 3. Build the Search URL
+    # We remove 'begin_date' to avoid timezone mismatches. 
+    # We use 'external_reference' to narrow the search for performance.
+    headers = {"Authorization": f"Bearer {token}"}
+    search_url = "https://api.mercadopago.com/v1/payments/search?sort=date_created&criteria=desc"
+
+    if external_reference:
+        search_url += f"&external_reference={external_reference}"
+    
+    try:
+        response = requests.get(search_url, headers=headers, timeout=20)
         
-        Uses GET /v1/payments/search to find payments by external_reference.
-        Filters results by preference_id and creation date to avoid matching old payments.
-        This is the recommended approach when using Checkout Preferences.
-        
-        Args:
-            payment_id: MercadoPago preference ID (used for logging/fallback)
-            external_reference: External reference to search for payments
-        
-        Returns:
-            dict: {
-                "payment_status": str (pending, approved, rejected, etc.),
-                "status_detail": str (optional detail)
-            }
-        """
-        # Get Access Token
-        token = self._get_access_token()
-        
-        # Get transaction record to retrieve external_reference and creation time
-        tx = request.env['mp.transaction'].sudo().search([('mp_payment_id', '=', payment_id)], limit=1)
-        
-        if not token:
-            # Fallback to database
-            if tx:
-                return {"payment_status": tx.status}
-            return {"payment_status": "not_found"}
-        
-        # Use external_reference from parameter or transaction
-        if not external_reference and tx:
-            external_reference = tx.external_reference
-        
-        # Calculate minimum creation date (preference created within last 2 hours)
-        # This ensures we don't match old payments from previous orders
-        min_date = datetime.utcnow() - timedelta(hours=2)
-        min_date_str = min_date.strftime("%Y-%m-%dT%H:%M:%S.000-04:00")
-        
-        # Use /v1/payments/search to find payments
-        headers = {
-            "Authorization": f"Bearer {token}",
-        }
-        
-        if external_reference:
-            # Search by external_reference and sort by date (most recent first)
-            search_url = f"https://api.mercadopago.com/v1/payments/search?external_reference={external_reference}&sort=date_created&criteria=desc"
-        else:
-            # Fallback: search recent payments only
-            search_url = f"https://api.mercadopago.com/v1/payments/search?sort=date_created&criteria=desc&range=date_created&begin_date={min_date_str}"
-        
-        try:
-            response = requests.get(search_url, headers=headers, timeout=20)
+        if response.status_code == 200:
+            data = response.json()
+            results = data.get("results", [])
             
-            try:
-                data = response.json()
-            except Exception:
-                data = {"raw": response.text}
-            
-            if response.status_code == 200:
-                results = data.get("results", [])
+            # 4. Iterate and find the EXACT match
+            for payment in results:
+                # This is the most important check:
+                # Does the payment found in MP belong to our current Preference (QR)?
+                payment_preference_id = payment.get("preference_id")
                 
-                if results:
-                    # Filter results to find payment matching our preference_id
-                    # payment_id is actually a preference_id from Checkout Preferences
-                    matching_payment = None
+                if payment_preference_id and str(payment_preference_id) == str(payment_id):
+                    status = payment.get("status", "pending")
+                    status_detail = payment.get("status_detail", "")
+                    actual_payment_id = payment.get("id")
                     
-                    for payment in results:
-                        # Check if payment has matching preference_id
-                        payment_preference_id = payment.get("preference_id")
-                        if payment_preference_id and str(payment_preference_id) == str(payment_id):
-                            # Also check creation date is recent (within last 2 hours)
-                            date_created = payment.get("date_created")
-                            if date_created:
-                                try:
-                                    # Parse MercadoPago date format: "2024-01-01T12:00:00.000-04:00"
-                                    payment_date = datetime.strptime(date_created.split('.')[0], "%Y-%m-%dT%H:%M:%S")
-                                    if payment_date >= min_date:
-                                        matching_payment = payment
-                                        break
-                                except (ValueError, AttributeError):
-                                    # If date parsing fails, still consider it if preference_id matches
-                                    matching_payment = payment
-                                    break
+                    # Update local Odoo database
+                    if tx and tx.status != status:
+                        tx.sudo().write({
+                            'status': status,
+                            'raw_data': json.dumps(payment),
+                        })
                     
-                    # If no matching payment found by preference_id, check if external_reference matches
-                    # and payment is recent (but only if we have external_reference)
-                    if not matching_payment and external_reference:
-                        for payment in results:
-                            payment_ext_ref = payment.get("external_reference")
-                            if payment_ext_ref == external_reference:
-                                date_created = payment.get("date_created")
-                                if date_created:
-                                    try:
-                                        payment_date = datetime.strptime(date_created.split('.')[0], "%Y-%m-%dT%H:%M:%S")
-                                        if payment_date >= min_date:
-                                            matching_payment = payment
-                                            break
-                                    except (ValueError, AttributeError):
-                                        # If date parsing fails, use first matching external_reference
-                                        matching_payment = payment
-                                        break
-                    
-                    if matching_payment:
-                        status = matching_payment.get("status", "pending")
-                        status_detail = matching_payment.get("status_detail", "")
-                        actual_payment_id = matching_payment.get("id")
-                        
-                        # Update local transaction record if exists
-                        if tx and tx.status != status:
-                            tx.sudo().write({
-                                'status': status,
-                                'raw_data': json.dumps(matching_payment),
-                            })
-                        
-                        return {
-                            "payment_status": status,
-                            "status_detail": status_detail,
-                            "payment_id": str(actual_payment_id),
-                        }
-                    else:
-                        # No matching recent payment found - still pending
-                        return {"payment_status": "pending"}
-                else:
-                    # No payments found yet - still pending
-                    return {"payment_status": "pending"}
-            
-            elif response.status_code == 401:
-                if tx:
-                    return {"payment_status": tx.status}
-                return {"payment_status": "pending"}
-            
-            elif response.status_code >= 400:
-                if tx:
-                    return {"payment_status": tx.status}
-                return {"payment_status": "pending"}
-                
-        except requests.exceptions.Timeout:
-            if tx:
-                return {"payment_status": tx.status}
-            return {"payment_status": "pending"}
-        except Exception:
-            if tx:
-                return {"payment_status": tx.status}
-            return {"payment_status": "pending"}
-            
+                    return {
+                        "payment_status": status,
+                        "status_detail": status_detail,
+                        "payment_id": str(actual_payment_id),
+                    }
+        
+        # 5. Fallback: If no match found in API, check local DB, otherwise pending
+        return {"payment_status": tx.status if tx else "pending"}
+
+    except Exception as e:
+        # Log the error if necessary: print(f"MP Status Error: {e}")
+        return {"payment_status": tx.status if tx else "pending"}     
 
     @http.route('/mp/pos/create_preference', type='json', auth='user', csrf=False)
     def create_preference_http(self, **kwargs):
