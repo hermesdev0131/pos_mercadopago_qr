@@ -5,11 +5,11 @@
         <record id="view_pos_payment_method_form_inherit" model="ir.ui.view">
             <field name="name">pos.payment.method.form.inherit.mercadopago</field>
             <field name="model">pos.payment.method</field>
-            <field name="inherit_id" ref="point_of_sale.view_pos_payment_method_form"/>
+            <field name="inherit_id" ref="point_of_sale.pos_payment_method_view_form"/>
             <field name="arch" type="xml">
                 <xpath expr="//field[@name='use_payment_terminal']" position="after">
                     <field name="use_mercadopago_qr" 
-                           attrs="{'invisible': [('use_payment_terminal', '=', False)]}"/>
+                           invisible="not use_payment_terminal"/>
                 </xpath>
             </field>
         </record>
