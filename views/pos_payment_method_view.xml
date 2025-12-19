@@ -1,19 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <odoo>
-    <data>
-        <!-- Inherit POS Payment Method Form View -->
-        <record id="view_pos_payment_method_form_inherit" model="ir.ui.view">
-            <field name="name">pos.payment.method.form.inherit.mercadopago</field>
-            <field name="model">pos.payment.method</field>
-            <field name="inherit_id" ref="point_of_sale.pos_payment_method_view_form"/>
-            <field name="arch" type="xml">
-                <!-- Add MercadoPago QR checkbox - always visible, positioned before identify_customer field -->
-                <xpath expr="//field[@name='identify_customer']" position="after">
-                    <field name="use_mercadopago_qr" 
-                           string="Use MercadoPago QR"
-                           widget="boolean_checkbox"/>
-                </xpath>
-            </field>
-        </record>
-    </data>
+    <record id="view_pos_payment_method_form_inherit" model="ir.ui.view">
+        <field name="name">pos.payment.method.form.inherit.mercadopago</field>
+        <field name="model">pos.payment.method</field>
+        <field name="inherit_id" ref="point_of_sale.pos_payment_method_view_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='is_online_payment']" position="after">
+                <field name="use_mercadopago_qr" string="MercadoPago QR"/>
+            </xpath>
+        </field>
+    </record>
 </odoo>
