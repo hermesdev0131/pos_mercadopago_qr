@@ -7,12 +7,6 @@
             <xpath expr="//form" position="inside">
                 <app string="MercadoPago" name="pos_mercadopago_qr">
                   <block title="MercadoPago Configuration">
-                      <!-- <setting string="API Credentials" help="Enter your MP credentials here.">
-                          <field name="mp_access_token"/>
-                          <field name="mp_public_key"/>
-                          <field name="mp_client_id"/>
-                          <field name="mp_client_secret"/>
-                      </setting> -->
                       <setting title="Access Token" help="MercadoPago Access Token">
                         <field name="mp_access_token"/>
                       </setting>

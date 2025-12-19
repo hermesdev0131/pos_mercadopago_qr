@@ -1,7 +1,7 @@
 import json
 import requests
 import urllib.parse
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from odoo import http
 from odoo.http import request
@@ -218,7 +218,7 @@ class MPApiController(http.Controller):
                     "external_reference": external_reference,
                     "mp_payment_id": str(preference_id),  # Store preference ID
                     "qr_data": qr_code or qr_code_base64[:100] if qr_code_base64 else "",
-                    "status": "pending",
+                    "status": "initial",  # Initial state: QR created, not yet scanned
                     "raw_data": json.dumps(data),
                     "amount": amount,
                 })
@@ -240,69 +240,223 @@ class MPApiController(http.Controller):
             return {"status": "error", "details": str(e)}
 
     def _check_mp_payment_status(self, payment_id, external_reference=None):
-    """
-    Check status of a payment by polling MercadoPago API.
-    Matches specifically by preference_id to ensure the POS only approves 
-    the payment for the CURRENTLY displayed QR code.
-    """
-    token = self._get_access_token()
-    
-    # 1. Retrieve the local transaction record
-    tx = request.env['mp.transaction'].sudo().search([('mp_payment_id', '=', payment_id)], limit=1)
-    
-    if not token:
-        return {"payment_status": tx.status if tx else "pending"}
-    
-    # 2. Use external_reference from parameter or transaction as a search filter
-    if not external_reference and tx:
-        external_reference = tx.external_reference
-    
-    # 3. Build the Search URL
-    # We remove 'begin_date' to avoid timezone mismatches. 
-    # We use 'external_reference' to narrow the search for performance.
-    headers = {"Authorization": f"Bearer {token}"}
-    search_url = "https://api.mercadopago.com/v1/payments/search?sort=date_created&criteria=desc"
-
-    if external_reference:
-        search_url += f"&external_reference={external_reference}"
-    
-    try:
-        response = requests.get(search_url, headers=headers, timeout=20)
+        """
+        Check status of a payment by polling MercadoPago API.
         
-        if response.status_code == 200:
-            data = response.json()
-            results = data.get("results", [])
+        Uses flexible matching:
+        1. Primary: Match by preference_id (payment_id is actually a preference_id)
+        2. Fallback: Match by external_reference if preference_id not available
+        
+        This ensures the POS detects payments even if MercadoPago doesn't include
+        preference_id in the payment object.
+        """
+        token = self._get_access_token()
+        
+        # 1. Retrieve the local transaction record
+        tx = request.env['mp.transaction'].sudo().search([('mp_payment_id', '=', payment_id)], limit=1)
+        
+        if not token:
+            # If no token, check DB status
+            if tx:
+                # Treat "initial" and "pending" as "pending" for polling
+                if tx.status in ('initial', 'pending'):
+                    return {"payment_status": "pending"}
+                return {"payment_status": tx.status}
+            return {"payment_status": "pending"}
+        
+        # 2. Use external_reference from parameter or transaction as a search filter
+        if not external_reference and tx:
+            external_reference = tx.external_reference
+        
+        # 3. SAFETY CHECK: Only search API if we have a way to filter results
+        # We need either preference_id (payment_id) OR external_reference to safely identify our payment
+        # Without a filter, searching would return ALL recent payments and could match unrelated approved payments
+        if not payment_id and not external_reference:
+            # No way to safely identify our payment - check DB only and return pending
+            if tx:
+                # Treat "initial" and "pending" as "pending" for polling
+                if tx.status in ('initial', 'pending'):
+                    return {"payment_status": "pending"}
+                # If DB has final status, return it (webhook updated it)
+                if tx.status in ('approved', 'rejected', 'cancelled'):
+                    return {"payment_status": tx.status}
+                return {"payment_status": "pending"}
+            return {"payment_status": "pending"}
+        
+        # 4. Build the Search URL - we have at least one filter (payment_id or external_reference)
+        headers = {"Authorization": f"Bearer {token}"}
+        
+        # Only search if we have external_reference to filter by
+        # If we only have payment_id (preference_id), we'll match by preference_id in the results
+        if not external_reference:
+            # We have payment_id but no external_reference
+            # We can't safely search without a filter - check DB only
+            if tx:
+                if tx.status in ('initial', 'pending'):
+                    return {"payment_status": "pending"}
+                if tx.status in ('approved', 'rejected', 'cancelled'):
+                    return {"payment_status": tx.status}
+                return {"payment_status": "pending"}
+            return {"payment_status": "pending"}
+        
+        # We have external_reference - safe to search with filter
+        search_url = f"https://api.mercadopago.com/v1/payments/search?sort=date_created&criteria=desc&external_reference={external_reference}"
+        
+        try:
+            response = requests.get(search_url, headers=headers, timeout=20)
             
-            # 4. Iterate and find the EXACT match
-            for payment in results:
-                # This is the most important check:
-                # Does the payment found in MP belong to our current Preference (QR)?
-                payment_preference_id = payment.get("preference_id")
+            api_match_found = False
+            
+            if response.status_code == 200:
+                data = response.json()
+                results = data.get("results", [])
                 
-                if payment_preference_id and str(payment_preference_id) == str(payment_id):
-                    status = payment.get("status", "pending")
-                    status_detail = payment.get("status_detail", "")
-                    actual_payment_id = payment.get("id")
+                # 4. Find matching payment - STRICT matching to avoid old payments
+                # Priority: preference_id (unique) > external_reference (only if recent)
+                for payment in results:
+                    payment_preference_id = payment.get("preference_id")
+                    payment_ext_ref = payment.get("external_reference")
                     
-                    # Update local Odoo database
-                    if tx and tx.status != status:
-                        tx.sudo().write({
-                            'status': status,
-                            'raw_data': json.dumps(payment),
-                        })
+                    # PRIMARY: Match by preference_id (this is unique and safe)
+                    matches_preference = payment_preference_id and str(payment_preference_id) == str(payment_id)
                     
-                    return {
-                        "payment_status": status,
-                        "status_detail": status_detail,
-                        "payment_id": str(actual_payment_id),
-                    }
-        
-        # 5. Fallback: If no match found in API, check local DB, otherwise pending
-        return {"payment_status": tx.status if tx else "pending"}
+                    if matches_preference:
+                        # Found exact match by preference_id - this is definitely our payment
+                        api_match_found = True
+                        status = payment.get("status", "pending")
+                        status_detail = payment.get("status_detail", "")
+                        actual_payment_id = payment.get("id")
+                        
+                        # Update local Odoo database
+                        if tx and tx.status != status:
+                            tx.sudo().write({
+                                'status': status,
+                                'raw_data': json.dumps(payment),
+                            })
+                        
+                        return {
+                            "payment_status": status,
+                            "status_detail": status_detail,
+                            "payment_id": str(actual_payment_id),
+                        }
+                    
+                    # FALLBACK: Only use external_reference if:
+                    # 1. No preference_id match found yet
+                    # 2. Payment has NO preference_id (old payment format - safe to match by external_ref)
+                    # 3. Payment is recent (created after our transaction)
+                    # IMPORTANT: If payment HAS a preference_id but it doesn't match, skip it (belongs to different preference)
+                    if (not api_match_found and 
+                        not payment_preference_id and  # Payment has no preference_id (old format)
+                        external_reference and 
+                        payment_ext_ref == external_reference):
+                        # Check if payment is recent (created after our transaction)
+                        payment_date_str = payment.get("date_created")
+                        if payment_date_str and tx:
+                            try:
+                                # Parse MercadoPago date format: "2024-01-01T12:00:00.000-04:00" (with timezone)
+                                # Try dateutil.parser first (most robust), fallback to manual parsing
+                                payment_date_utc = None
+                                
+                                try:
+                                    # Try dateutil.parser (handles all timezone formats automatically)
+                                    from dateutil import parser
+                                    payment_date = parser.parse(payment_date_str)
+                                    payment_date_utc = payment_date.astimezone(timezone.utc)
+                                except (ImportError, ValueError):
+                                    # Fallback: manual parsing for timezone
+                                    # Format: "2024-01-01T12:00:00.000-04:00" or "2024-01-01T12:00:00.000+03:00"
+                                    import re
+                                    # Extract timezone offset using regex: matches "+03:00" or "-04:00" at the end
+                                    tz_match = re.search(r'([+-]\d{2}):(\d{2})(?:Z)?$', payment_date_str)
+                                    if tz_match:
+                                        # Has timezone offset - extract date part (everything before the timezone)
+                                        # Remove milliseconds and timezone: "2024-01-01T12:00:00.000-04:00" -> "2024-01-01T12:00:00"
+                                        date_part = re.sub(r'\.\d{3}[+-]\d{2}:\d{2}$', '', payment_date_str)
+                                        if date_part == payment_date_str:
+                                            # Try alternative: remove timezone only
+                                            date_part = re.sub(r'[+-]\d{2}:\d{2}(?:Z)?$', '', payment_date_str)
+                                        
+                                        payment_date = datetime.strptime(date_part, "%Y-%m-%dT%H:%M:%S")
+                                        
+                                        # Parse timezone offset
+                                        # tz_match.group(1) is "+03" or "-04" (includes sign)
+                                        offset_str = tz_match.group(1)
+                                        hours = int(offset_str)  # int("+03") = 3, int("-04") = -4
+                                        minutes = int(tz_match.group(2))
+                                        # Calculate offset: hours already has sign, minutes is always positive
+                                        # For "+03:30": 3*3600 + 30*60 = 12600
+                                        # For "-04:30": -4*3600 - 30*60 = -16200
+                                        offset_seconds = hours * 3600 + (minutes * 60 if hours >= 0 else -minutes * 60)
+                                        tz = timezone(timedelta(seconds=offset_seconds))
+                                        payment_date = payment_date.replace(tzinfo=tz)
+                                        payment_date_utc = payment_date.astimezone(timezone.utc)
+                                    else:
+                                        # No timezone found - assume UTC
+                                        date_part = payment_date_str.split('.')[0] if '.' in payment_date_str else payment_date_str
+                                        payment_date = datetime.strptime(date_part, "%Y-%m-%dT%H:%M:%S")
+                                        payment_date_utc = payment_date.replace(tzinfo=timezone.utc)
+                                
+                                # Only proceed if date parsing was successful
+                                if payment_date_utc:
+                                    # Convert transaction_date to UTC
+                                    transaction_date = tx.create_date
+                                    if transaction_date.tzinfo:
+                                        transaction_date_utc = transaction_date.astimezone(timezone.utc)
+                                    else:
+                                        # Odoo stores naive datetime in UTC by default
+                                        transaction_date_utc = transaction_date.replace(tzinfo=timezone.utc)
+                                    
+                                    # Only accept if payment was created after our transaction (with 1 minute buffer for clock skew)
+                                    # This ensures we don't match old payments from previous orders
+                                    if payment_date_utc >= transaction_date_utc:
+                                        api_match_found = True
+                                        status = payment.get("status", "pending")
+                                        status_detail = payment.get("status_detail", "")
+                                        actual_payment_id = payment.get("id")
+                                        
+                                        # Update local Odoo database
+                                        if tx.status != status:
+                                            tx.sudo().write({
+                                                'status': status,
+                                                'raw_data': json.dumps(payment),
+                                            })
+                                        
+                                        return {
+                                            "payment_status": status,
+                                            "status_detail": status_detail,
+                                            "payment_id": str(actual_payment_id),
+                                        }
+                            except (ValueError, AttributeError):
+                                # If date parsing fails, skip this payment (too risky)
+                                continue
+            
+            # 5. If no API match found, check local DB immediately (webhook may have updated it)
+            # This ensures we detect webhook updates even if API search doesn't find the payment
+            if not api_match_found and tx:
+                # If webhook updated the DB to a final status, return it immediately
+                if tx.status in ('approved', 'rejected', 'cancelled'):
+                    return {"payment_status": tx.status}
+                # "initial" and "pending" both mean "not yet completed" - treat as pending
+                # This prevents auto-approval from old transactions
+                if tx.status in ('initial', 'pending'):
+                    return {"payment_status": "pending"}
+                # Fallback for any other status
+                return {"payment_status": tx.status if tx.status else "pending"}
+            
+            # No API match and no transaction record
+            return {"payment_status": "pending"}
 
-    except Exception as e:
-        # Log the error if necessary: print(f"MP Status Error: {e}")
-        return {"payment_status": tx.status if tx else "pending"}     
+        except Exception as e:
+            # On error, check if webhook updated the local DB
+            # This is critical - even if API fails, webhook updates should be detected
+            if tx:
+                if tx.status in ('approved', 'rejected', 'cancelled'):
+                    return {"payment_status": tx.status}
+                # "initial" and "pending" both mean "not yet completed" - treat as pending
+                if tx.status in ('initial', 'pending'):
+                    return {"payment_status": "pending"}
+                return {"payment_status": tx.status if tx.status else "pending"}
+            return {"payment_status": "pending"}     
 
     @http.route('/mp/pos/create_preference', type='json', auth='user', csrf=False)
     def create_preference_http(self, **kwargs):

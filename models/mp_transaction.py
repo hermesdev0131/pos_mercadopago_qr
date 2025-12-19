@@ -11,10 +11,11 @@ class MPTransaction(models.Model):
     external_reference = fields.Char(index=True, string="External Reference")
     qr_data = fields.Text(string="QR Data / URL")
     status = fields.Selection([
-        ('pending', 'Pending'),
+        ('initial', 'Initial'),      # QR created, not yet scanned
+        ('pending', 'Pending'),      # Payment actually pending
         ('approved', 'Approved'),
         ('rejected', 'Rejected'),
         ('cancelled', 'Cancelled'),
-    ], string="Status", default='pending')
+    ], string="Status", default='initial')
     amount = fields.Float(string="Amount", digits=(12, 2))
     raw_data = fields.Text(string="Raw Response JSON")

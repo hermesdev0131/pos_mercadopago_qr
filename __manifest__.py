@@ -1,10 +1,18 @@
 {
-    'name': "MercadoPago QR for POS",
-    'version': '1.0.0',
-    'summary': "Adds MercadoPago QR as a payment method for Odoo 18 POS",
+    'name': "Mercado Pago QR for Odoo POS",
+    'version': '18.0.1.0.0',
+    'summary': "Accept Mercado Pago QR payments in Odoo POS with real-time confirmation.",
     'category': "Point of Sale",
+     "description": """
+Accept Mercado Pago QR payments directly in Odoo Point of Sale.
+
+This module allows businesses to generate Mercado Pago QR codes from Odoo POS,
+enabling fast, secure, and cardless payments with real-time confirmation.
+Optimized for LATAM markets.
+    """,
     "license": "LGPL-3",
-    'author': "Hiroshi",
+    'author': "Hiroshi, WolfAIX",
+    'website': "https://www.wolfaix.com",
     'depends': ['point_of_sale', 'account'],
     'data': [
         'security/ir.model.access.csv',
@@ -24,4 +32,5 @@
     },
     'installable': True,
     'application': False,
+     "auto_install": False,
 }

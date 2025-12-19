@@ -33,7 +33,12 @@ patch(PaymentScreen.prototype, {
             external_reference: null,  // Store external reference for accurate payment status checking
             error: null,
             pollActive: false,   // Flag to control polling
+            currentOrderUid: null,  // Track current order to detect changes
+            currentPaymentLineUuid: null,  // Track current payment line to detect changes
         });
+
+        // Timer for auto-navigation after payment approval
+        this.autoNavigateTimer = null;
     },
 
     async validateOrder(isForceValidate) {
@@ -52,18 +57,53 @@ patch(PaymentScreen.prototype, {
                (this.mpState.status === "pending" || this.mpState.status === "loading");
     },
 
+    // _isMercadoPagoPayment(paymentMethod) {
+    //     // Check if payment method uses MercadoPago QR via boolean field
+    //     // This is robust against name changes, translations, and variations
+    //     if (!paymentMethod) {
+    //         return false;
+    //     }
+    //     return paymentMethod.use_mercadopago_qr === true;
+    // },
+
+    _isMercadoPagoPayment(paymentMethod) {
+        // Check if payment method is MercadoPago (handles both "MercadoPago" and "Mercado Pago")
+        if (!paymentMethod || !paymentMethod.name) {
+            return false;
+        }
+        const name = paymentMethod.name.trim();
+        return name === "MercadoPago" || name === "Mercado Pago";
+    },
+
     
     selectPaymentLine(uuid) {
         super.selectPaymentLine(uuid);
 
         const line = this.paymentLines.find((l) => l.uuid === uuid);
+        const order = this.currentOrder;
 
-        if (line && line.payment_method_id && line.payment_method_id.name === "MercadoPago") {
+        if (line && line.payment_method_id && this._isMercadoPagoPayment(line.payment_method_id)) {
+            // Check if order or payment line changed
+            const orderUid = order ? order.uid : null;
+            const lineUuid = line.uuid;
+            
+            if (this.mpState.currentOrderUid !== orderUid || 
+                this.mpState.currentPaymentLineUuid !== lineUuid) {
+                // Different order or payment line - reset state
+                this._resetMPState();
+                this.mpState.currentOrderUid = orderUid;
+                this.mpState.currentPaymentLineUuid = lineUuid;
+            }
+            
             const status = line.get_payment_status();
             if (status !== 'done' && status !== 'waitingCard') {
                 this.showMPQRPopup();
             }
         } else {
+            // Not MercadoPago payment - hide popup and reset if needed
+            if (this.mpState.currentPaymentLineUuid !== uuid) {
+                this._resetMPState();
+            }
             this.hideMPQRPopup();
         }
     },
@@ -72,7 +112,22 @@ patch(PaymentScreen.prototype, {
     async addNewPaymentLine(paymentMethod) {
         const result = await super.addNewPaymentLine(paymentMethod);
 
-        if (paymentMethod.name === "MercadoPago") {
+        if (this._isMercadoPagoPayment(paymentMethod)) {
+            // New payment line - ensure state is reset
+            const order = this.currentOrder;
+            const line = this.selectedPaymentLine;
+            if (order && line) {
+                const orderUid = order.uid;
+                const lineUuid = line.uuid;
+                
+                if (this.mpState.currentOrderUid !== orderUid || 
+                    this.mpState.currentPaymentLineUuid !== lineUuid) {
+                    // Different order or payment line - reset state
+                    this._resetMPState();
+                    this.mpState.currentOrderUid = orderUid;
+                    this.mpState.currentPaymentLineUuid = lineUuid;
+                }
+            }
             this.showMPQRPopup();
         }
         return result;
@@ -81,7 +136,7 @@ patch(PaymentScreen.prototype, {
     async deletePaymentLine(uuid) {
         const line = this.paymentLines.find((l) => l.uuid === uuid);
         
-        if (line && line.payment_method_id && line.payment_method_id.name === "MercadoPago") {
+        if (line && line.payment_method_id && this._isMercadoPagoPayment(line.payment_method_id)) {
             if (this._isMPPaymentPending()) {
                 this.mpNotification.add(
                     "Cancele el pago de MercadoPago antes de eliminar la línea.",
@@ -94,7 +149,47 @@ patch(PaymentScreen.prototype, {
         return super.deletePaymentLine(uuid);
     },
     
+    _resetMPState() {
+        // STOP POLLING FIRST - critical to prevent old polling from continuing
+        this.mpState.pollActive = false;
+        
+        // Clear auto-navigation timer if it exists
+        if (this.autoNavigateTimer) {
+            clearTimeout(this.autoNavigateTimer);
+            this.autoNavigateTimer = null;
+        }
+        
+        // Clear payment identifiers BEFORE other fields
+        // This ensures polling checks fail immediately if they're still running
+        this.mpState.payment_id = null;
+        this.mpState.external_reference = null;
+        
+        // Then reset other state
+        this.mpState.status = "idle";
+        this.mpState.error = null;
+        this.mpState.qr_url = null;
+    },
+    
     showMPQRPopup() {
+        const order = this.currentOrder;
+        const line = this.selectedPaymentLine;
+        
+        if (!order || !line) {
+            return;
+        }
+        
+        const orderUid = order.uid;
+        const lineUuid = line.uuid;
+        
+        // Check if order or payment line changed - reset completely if so
+        if (this.mpState.currentOrderUid !== orderUid || 
+            this.mpState.currentPaymentLineUuid !== lineUuid) {
+            // New order or payment line - reset completely
+            this._resetMPState();
+            this.mpState.currentOrderUid = orderUid;
+            this.mpState.currentPaymentLineUuid = lineUuid;
+        }
+        
         this.mpState.visible = true;
         
         // Reset state only if not already pending
@@ -111,7 +206,7 @@ patch(PaymentScreen.prototype, {
     
     _getMPAmount() {
         const line = this.selectedPaymentLine;
-        if (line && line.payment_method_id && line.payment_method_id.name === "MercadoPago") {
+        if (line && line.payment_method_id && this._isMercadoPagoPayment(line.payment_method_id)) {
             return line.amount || 0;
         }
         // Fallback to order due amount
@@ -122,6 +217,13 @@ patch(PaymentScreen.prototype, {
     hideMPQRPopup() {
         // Stop polling when hiding
         this.mpState.pollActive = false;
+        
+        // Clear auto-navigation timer if it exists
+        if (this.autoNavigateTimer) {
+            clearTimeout(this.autoNavigateTimer);
+            this.autoNavigateTimer = null;
+        }
+        
         this.mpState.visible = false;
     },
 
@@ -157,6 +259,12 @@ patch(PaymentScreen.prototype, {
     async _handleMPCancel() {
         this.mpState.pollActive = false;
         
+        // Clear auto-navigation timer if it exists
+        if (this.autoNavigateTimer) {
+            clearTimeout(this.autoNavigateTimer);
+            this.autoNavigateTimer = null;
+        }
+        
         const line = this.selectedPaymentLine;
         const lineUuid = line ? line.uuid : null;
         
@@ -176,11 +284,8 @@ patch(PaymentScreen.prototype, {
             }
         }
         
-        this.mpState.status = "idle";
-        this.mpState.payment_id = null;
-        this.mpState.external_reference = null;
-        this.mpState.qr_url = null;
-        this.mpState.error = null;
+        // Reset state completely
+        this._resetMPState();
         this.hideMPQRPopup();
         
         if (lineUuid) {
@@ -201,6 +306,8 @@ patch(PaymentScreen.prototype, {
     },
 
     async _handleMPNewOrder() {
+        // Reset state completely for new order
+        this._resetMPState();
         this.hideMPQRPopup();
         
         try {
@@ -273,8 +380,33 @@ patch(PaymentScreen.prototype, {
     },
 
     async _pollPaymentStatus() {
+        // Validate we're still polling the correct payment
+        const order = this.currentOrder;
+        const line = this.selectedPaymentLine;
         
+        // Basic checks first
         if (!this.mpState.payment_id || !this.mpState.visible || !this.mpState.pollActive) {
+            return;
+        }
+        
+        // Verify order and payment line still exist
+        if (!order || !line) {
+            this.mpState.pollActive = false;
+            return;
+        }
+        
+        // CRITICAL: Verify order/payment line hasn't changed
+        // This prevents polling from continuing with old payment_id after state reset
+        if (this.mpState.currentOrderUid !== order.uid || 
+            this.mpState.currentPaymentLineUuid !== line.uuid) {
+            // Order/payment line changed - stop polling immediately
+            this.mpState.pollActive = false;
+            return;
+        }
+        
+        // Verify payment_id is still valid (shouldn't be null after above checks, but double-check)
+        if (!this.mpState.payment_id) {
+            this.mpState.pollActive = false;
             return;
         }
 
@@ -304,6 +436,32 @@ patch(PaymentScreen.prototype, {
                     "¡Pago aprobado exitosamente!",
                     { type: "success", title: "MercadoPago" }
                 );
+                
+                // Set timer to auto-navigate to new order after 3 seconds
+                // Store current order/payment line to verify they haven't changed
+                const currentOrderUid = order ? order.uid : null;
+                const currentLineUuid = line ? line.uuid : null;
+                
+                // Clear any existing timer first
+                if (this.autoNavigateTimer) {
+                    clearTimeout(this.autoNavigateTimer);
+                }
+                
+                this.autoNavigateTimer = setTimeout(() => {
+                    // Verify order and payment line haven't changed before navigating
+                    const currentOrder = this.currentOrder;
+                    const currentLine = this.selectedPaymentLine;
+                    
+                    if (currentOrder && currentLine &&
+                        currentOrder.uid === currentOrderUid &&
+                        currentLine.uuid === currentLineUuid &&
+                        this.mpState.status === "approved") {
+                        this._handleMPNewOrder();
+                    }
+                    
+                    this.autoNavigateTimer = null;
+                }, 3000);
+                
                 return;
             }
 
