@@ -26,11 +26,13 @@ def _auto_approve_payment(payment_id, delay):
 class PosPaymentMethod(models.Model):
     _inherit = 'pos.payment.method'
 
-    use_mercadopago_qr = fields.Boolean(
-        string='Use MercadoPago QR',
-        default=False,
-        help='Enable this to use MercadoPago QR integration for this payment method'
-    )
+    use_mercadopago_qr = fields.Boolean(string='Use MercadoPago QR')
+    @api.model
+    def _load_pos_data_fields(self, config_id):
+        """ Appends custom field to be loaded into the POS JavaScript """
+        params = super()._load_pos_data_fields(config_id)
+        params.append('use_mercadopago_qr')
+        return params
 
     @api.model
     def create_mp_payment(self, amount, description, pos_client_ref, payment_method_id, customer_email=None):
