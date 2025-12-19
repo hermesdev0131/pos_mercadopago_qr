@@ -7,9 +7,8 @@
         <field name="arch" type="xml">
             <xpath expr="//field[@name='online_payment']" position="after">
                 <field name="use_mercadopago_qr" 
-                       string="Use MercadoPago QR"
-                       widget="boolean_toggle"
-                       invisible="not online_payment"/>
+                       invisible="not online_payment"
+                       widget="boolean_toggle"/>
             </xpath>
         </field>
     </record>

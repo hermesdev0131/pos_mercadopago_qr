@@ -26,10 +26,14 @@ def _auto_approve_payment(payment_id, delay):
 class PosPaymentMethod(models.Model):
     _inherit = 'pos.payment.method'
 
-    use_mercadopago_qr = fields.Boolean(string='Use MercadoPago QR')
+    use_mercadopago_qr = fields.Boolean(
+        string='Use MercadoPago QR',
+        help='Enable this to use MercadoPago QR integration for this payment method'
+    )
+
     @api.model
     def _load_pos_data_fields(self, config_id):
-        """ Appends custom field to be loaded into the POS JavaScript """
+        # Odoo 18 uses this method to send data to the Owl frontend
         params = super()._load_pos_data_fields(config_id)
         params.append('use_mercadopago_qr')
         return params
