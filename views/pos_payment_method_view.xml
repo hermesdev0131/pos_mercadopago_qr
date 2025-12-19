@@ -7,11 +7,10 @@
             <field name="model">pos.payment.method</field>
             <field name="inherit_id" ref="point_of_sale.pos_payment_method_view_form"/>
             <field name="arch" type="xml">
-                <!-- Add MercadoPago QR field as a new group after existing groups -->
-                <xpath expr="//sheet//group[1]" position="after">
-                    <group string="MercadoPago Integration">
-                        <field name="use_mercadopago_qr" widget="boolean_toggle"/>
-                    </group>
+                <!-- Add MercadoPago QR checkbox after use_payment_terminal field -->
+                <xpath expr="//field[@name='use_payment_terminal']" position="after">
+                    <field name="use_mercadopago_qr" 
+                           invisible="not use_payment_terminal"/>
                 </xpath>
             </field>
         </record>
