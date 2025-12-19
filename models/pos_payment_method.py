@@ -31,12 +31,12 @@ class PosPaymentMethod(models.Model):
         help='Enable this to use MercadoPago QR integration for this payment method'
     )
 
-    @api.model
-    def _load_pos_data_fields(self, config_id):
-        # Odoo 18 uses this method to send data to the Owl frontend
-        params = super()._load_pos_data_fields(config_id)
-        params.append('use_mercadopago_qr')
-        return params
+    # @api.model
+    # def _load_pos_data_fields(self, config_id):
+    #     # Odoo 18 uses this method to send data to the Owl frontend
+    #     params = super()._load_pos_data_fields(config_id)
+    #     params.append('use_mercadopago_qr')
+    #     return params
 
     @api.model
     def create_mp_payment(self, amount, description, pos_client_ref, payment_method_id, customer_email=None):
