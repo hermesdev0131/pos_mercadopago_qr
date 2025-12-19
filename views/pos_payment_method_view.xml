@@ -5,7 +5,7 @@
         <field name="model">pos.payment.method</field>
         <field name="inherit_id" ref="point_of_sale.pos_payment_method_view_form"/>
         <field name="arch" type="xml">
-            <xpath expr="//group[@name='payment_terminal_config']//field[@name='online_payment']" position="after">
+            <xpath expr="//field[@name='online_payment']" position="after">
                 <field name="use_mercadopago_qr" 
                        string="Use MercadoPago QR" 
                        invisible="not online_payment"/>
