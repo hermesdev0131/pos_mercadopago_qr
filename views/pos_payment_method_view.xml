@@ -7,11 +7,11 @@
             <field name="model">pos.payment.method</field>
             <field name="inherit_id" ref="point_of_sale.pos_payment_method_view_form"/>
             <field name="arch" type="xml">
-                <!-- Add MercadoPago QR checkbox below Online payment field -->
-                <xpath expr="//field[@name='use_payment_terminal']" position="after">
+                <!-- Add MercadoPago QR checkbox - always visible, positioned before identify_customer field -->
+                <xpath expr="//field[@name='identify_customer']" position="after">
                     <field name="use_mercadopago_qr" 
                            string="Use MercadoPago QR"
-                           invisible="not use_payment_terminal"/>
+                           widget="boolean_checkbox"/>
                 </xpath>
             </field>
         </record>
