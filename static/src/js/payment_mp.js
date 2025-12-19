@@ -57,22 +57,13 @@ patch(PaymentScreen.prototype, {
                (this.mpState.status === "pending" || this.mpState.status === "loading");
     },
 
-    // _isMercadoPagoPayment(paymentMethod) {
-    //     // Check if payment method uses MercadoPago QR via boolean field
-    //     // This is robust against name changes, translations, and variations
-    //     if (!paymentMethod) {
-    //         return false;
-    //     }
-    //     return paymentMethod.use_mercadopago_qr === true;
-    // },
-
     _isMercadoPagoPayment(paymentMethod) {
-        // Check if payment method is MercadoPago (handles both "MercadoPago" and "Mercado Pago")
-        if (!paymentMethod || !paymentMethod.name) {
+        // Check if payment method uses MercadoPago QR via boolean field
+        // This is robust against name changes, translations, and variations
+        if (!paymentMethod) {
             return false;
         }
-        const name = paymentMethod.name.trim();
-        return name === "MercadoPago" || name === "Mercado Pago";
+        return paymentMethod.use_mercadopago_qr === true;
     },
 
     

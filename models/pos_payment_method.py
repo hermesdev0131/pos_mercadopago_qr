@@ -1,4 +1,4 @@
-from odoo import models, api
+from odoo import models, api, fields
 import requests
 import logging
 import json
@@ -25,6 +25,12 @@ def _auto_approve_payment(payment_id, delay):
 
 class PosPaymentMethod(models.Model):
     _inherit = 'pos.payment.method'
+
+    use_mercadopago_qr = fields.Boolean(
+        string='Use MercadoPago QR',
+        default=False,
+        help='Enable this to use MercadoPago QR integration for this payment method'
+    )
 
     @api.model
     def create_mp_payment(self, amount, description, pos_client_ref, payment_method_id, customer_email=None):
