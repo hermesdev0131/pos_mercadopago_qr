@@ -6,7 +6,7 @@
         <field name="inherit_id" ref="point_of_sale.pos_payment_method_view_form"/>
         <field name="arch" type="xml">
             <!-- Position after the 'online_payment' field -->
-            <xpath expr="//field[@name='is_cash_count']" position="after">
+            <xpath expr="//field[@name='is_online_payment']" position="after">
                 <field name="use_mercadopago_qr"/>
             </xpath>
         </field>
