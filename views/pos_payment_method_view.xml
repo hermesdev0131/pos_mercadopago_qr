@@ -5,9 +5,8 @@
         <field name="model">pos.payment.method</field>
         <field name="inherit_id" ref="point_of_sale.pos_payment_method_view_form"/>
         <field name="arch" type="xml">
-            <!-- Position after the 'name' field (Method) - this is a known, unique field -->
-            <!-- Using direct child selector for precise matching -->
-            <xpath expr="//sheet/group/group/field[@name='name']" position="after">
+            <!-- Position after the 'online_payment' field -->
+            <xpath expr="//field[@name='use_payment_terminal']" position="after">
                 <field name="use_mercadopago_qr"/>
             </xpath>
         </field>
