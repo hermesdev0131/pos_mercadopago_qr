@@ -5,9 +5,9 @@
         <field name="model">pos.payment.method</field>
         <field name="inherit_id" ref="point_of_sale.pos_payment_method_view_form"/>
         <field name="arch" type="xml">
-            <!-- Position at the end of the first group that contains fields -->
-            <!-- This ensures the field is added with visible label inside the form group -->
-            <xpath expr="//sheet//group//group[1]" position="inside">
+            <!-- Position at the end of the FIRST group only (using parentheses for global selection) -->
+            <!-- This ensures the field is added only once with visible label -->
+            <xpath expr="(//sheet//group//group)[1]" position="inside">
                 <field name="use_mercadopago_qr"/>
             </xpath>
         </field>
