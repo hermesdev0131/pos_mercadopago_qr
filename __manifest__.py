@@ -13,7 +13,7 @@ Optimized for LATAM markets.
     "license": "LGPL-3",
     'author': "Hiroshi, WolfAIX",
     'website': "https://www.wolfaix.com",
-    'depends': ['point_of_sale', 'account'],
+    'depends': ['point_of_sale', 'account', 'pos_online_payment'],
     'data': [
         'security/ir.model.access.csv',
         'views/mp_settings_view.xml',
